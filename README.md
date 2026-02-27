@@ -252,87 +252,30 @@ python unsupervised_monthly/aggregate_recalls.py
 ---
 ## Model Architecture
 
-The system uses a hybrid architecture combining:
+The monthly pipelines support multiple feature extraction backends:
 
-1. **Spatial Feature Extractor**: U-Net with ResNet20 encoder
-   - Processes 4-band satellite images
-   - Uses ImageNet pre-trained weights
-   - Extracts spatial features for each time step
+1. **Handcrafted features**: Spectral indices (NDVI, BSI, etc.) computed directly from 4-band imagery
+2. **Foundation model embeddings**: DINOv3, Prithvi-EO-2.0, SatMAE, SatCLIP, GeoRSCLIP, Satlaspretrain
 
-2. **Temporal Processing**: 
-   - Temporal convolutional networks with dilated convolutions
-   - Multi-head attention mechanism
-   - Global feature aggregation
+These embeddings feed into three scoring pipelines:
 
-3. **Multi-task Heads**:
-   - Change classification (binary)
-   - Temporal localization (month prediction)
-   - Uncertainty estimation
-
-## Key Features
-
-### Mask Processing
-- Each site has a corresponding mask file (`mask.tif`)
-- Non-zero mask values (1 or 2) are treated as areas of interest
-- Images are masked before processing to focus on relevant areas
-
-### Balanced Data Split
-- 60% training, 20% validation, 20% test
-- Stratified split ensures balanced representation of looted and preserved sites
-- Split information is saved for reproducibility
-
-### Uncertainty Quantification
-- Monte Carlo dropout for uncertainty estimation
-- Confidence-based filtering for reliable predictions
-- Uncertainty correlation analysis
-
-## Outputs
-
-### Training Outputs
-- Model checkpoints (`best_model.pth`, `latest_checkpoint.pth`)
-- Training logs and TensorBoard summaries
-- Split information (`split_info.json`)
-- Final evaluation results (`final_results.json`)
-
-### Inference Outputs
-- Prediction summaries (`summary_report.json`)
-- Attention map visualizations (`attention_maps.png`)
-- Distribution plots (`summary_plots.png`)
-- Detailed predictions CSV
-
-### Unsupervised Outputs
-- `unsup_models.pt` (ensemble checkpoint)
-- `scaler_stats.npz` (feature & calendar normalization stats)
-- `unsup_month_scores_<split>.csv` (raw scores / probabilities)
+- **Distance baseline**: Detects change by measuring embedding drift over time (no training required)
+- **Learned unsupervised**: Trains an ensemble of reconstruction / forecasting / novelty heads, then exports month-level scores
+- **Weakly-supervised**: Trains a lightweight sequence model using month labels up to a cutoff date
 
 ## Evaluation Metrics
 
 The system evaluates:
-- **Classification**: Accuracy, Precision, Recall, F1-score, ROC-AUC
-- **Temporal Localization**: Month prediction accuracy within ±3 months
-- **Uncertainty**: Correlation with prediction confidence
-- **Interpretability**: Attention map analysis
+- **Temporal Localization**: Month prediction accuracy within configurable tolerance (top-k, margin)
+- **Recall**: Per-embedding and aggregated recall at varying temporal margins
+- **Score distributions**: Histograms and directional change analysis
 
 ## Requirements
 
-- Python 3.8+
-- PyTorch 1.9+
+- Python 3.11+ (tested with 3.11)
+- PyTorch 2.3+
 - Rasterio for GeoTIFF processing
-- Segmentation Models PyTorch for U-Net
-- Other dependencies listed in `requirements.txt`
-
-## Citation
-
-If you use this code, please cite:
-
-```bibtex
-@article{archaeological_change_detection,
-  title={Deep Learning for Archaeological Site Change Detection},
-  author={Your Name},
-  journal={Journal Name},
-  year={2024}
-}
-```
+- All pinned dependencies in `requirements.txt`
 
 ## License
 
@@ -340,131 +283,93 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ---
 
-## Quick Start Cheat Sheet (Feature Extraction & Unsupervised Global Inference)
+## Quick Start Cheat Sheet
 
-This section summarizes (a) canonical feature CSV filename patterns, (b) minimal extraction command templates, and (c) how to trigger unified unsupervised global inference using the standardized pipeline. Adjust GPU device (`--device cuda:0`) as needed.
+### 1. Feature Extraction
 
-### 1. Feature CSV Naming Patterns
-
-Feature CSVs are expected to include the model key and the collection type in the filename (e.g., monthly per-site vs global-sites grid), and many scripts use a `global_sites_grid` substring to locate the right files.
-
-Example (global grid, 1.0 km$^2$ tiles, DINOv3): `planet_mosaics_final_4bands/features/features_dinov3_global_sites_grid_1.0km2.csv`.
-
-### 2. Minimal Feature Extraction Command Templates
-
-Assumes imagery root directory `planet_mosaics_final_4bands` with per-site folders and month TIFFs.
+All feature extraction goes through the unified entry point:
 
 ```bash
-# DINOv3 (example variant convnext-base)
-python extract_dinov3_features.py \
-   --images-root planet_mosaics_final_4bands \
-   --output-csv planet_mosaics_final_4bands/features/features_dinov3_global_sites_grid_1.0km2.csv \
-   --model-type convnext-base \
-   --device cuda:0
+# Per-site monthly embeddings (Afghanistan pipeline)
+./extract_embeddings.sh --mode site \
+   --model handcrafted \
+   --images-root planet_mosaics_final_4bands/images \
+   --use-mask --masks-root planet_mosaics_final_4bands/masks_buffered \
+   --start-year 2017 --end-year 2024 \
+   --output-dir planet_mosaics_final_4bands/features_unified_new_with_mask
 
-# Unified extractor (Prithvi, SatMAE, SatCLIP, GeoRSCLIP, Satlaspretrain)
-python extract_embeddings_unified_modified.py --mode grid \
-   --model prithvi-eo-2.0 \
-   --images-root planet_mosaics_final_4bands \
-   --output-csv planet_mosaics_final_4bands/features/features_prithvi-2.0_global_sites_grid_1.0km2.csv \
-   --start-year 2017 --end-year 2024 --device cuda:0
+# Foundation model example (DINOv3)
+./extract_embeddings.sh --mode site \
+   --model dinov3 \
+   --images-root planet_mosaics_final_4bands/images \
+   --use-mask --masks-root planet_mosaics_final_4bands/masks_buffered \
+   --start-year 2017 --end-year 2024 \
+   --device cuda:0 \
+   --output-dir planet_mosaics_final_4bands/features_unified_new_with_mask
 
-python extract_embeddings_unified_modified.py --mode grid \
+# Global grid embeddings (optional, for large-area tiling)
+./extract_embeddings.sh --mode grid \
    --model satmae \
    --images-root planet_mosaics_final_4bands \
-   --output-csv planet_mosaics_final_4bands/features/features_satmae_global_sites_grid_1.0km2.csv \
-   --start-year 2017 --end-year 2024 --device cuda:0
-
-# Repeat for satclip, georsclip, satlaspretrain changing --model and output filename accordingly
+   --start-year 2017 --end-year 2024 \
+   --output-dir planet_mosaics_final_4bands/features_unified_global_without_mask
 ```
 
-### 3. Unified Unsupervised Global Inference (Per Model)
-
-After all feature CSVs are present inside `planet_mosaics_final_4bands/features/`, run (example for `satmae`):
+### 2. Run Pipelines
 
 ```bash
-cd old_model_scripts_backup/unsupervised
-bash run_unsupervised_global_inference.sh --model satmae
+# Distance baseline
+bash unsupervised_monthly/run_baseline_pipeline.sh start   # launch tmux sessions
+bash unsupervised_monthly/run_baseline_pipeline.sh all     # merge + evaluate
+
+# Learned unsupervised
+bash unsupervised_monthly/run_unsupervised_pipeline.sh start
+bash unsupervised_monthly/run_unsupervised_pipeline.sh all
+
+# Weakly-supervised
+bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh start
+bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh aggregate
 ```
 
-Key behaviors:
-1. EXPORT stage: Produces `unsup_month_scores_all.csv` inside `old_model_scripts_backup/unsupervised/model_runs/<model>/global/` with month-labeled probability columns (2017_01 .. 2024_12) using configured normalization (e.g., sigmoid temperature, seasonal, cross-grid).
-2. Evaluation stage: Consumes the exported probabilities directly (`--score_norm_method none`) to compute month probability matrix, top-k, histograms, writing all outputs into the same `global/` subdirectory.
-3. Consistency: The suffixed copy (e.g., `unsup_month_scores_all_global_all.csv`) is synchronized with the canonical export when month-name-only mode is used so they match byte-for-byte.
+### 3. Global Inference (All Embeddings)
 
-### 4. Force Re-Export When Needed
+```bash
+# Distance baseline — global
+bash unsupervised_monthly/run_baseline_global.sh
 
-Use `--force-export` (script flag) if:
-- You modified normalization hyperparameters (temperature, seasonal toggles, fusion weights).
-- You changed component alpha weights (`alpha_rec`, `alpha_fore`, `alpha_novel`).
-- You updated the feature CSVs (new extraction run or bug fix).
+# Learned unsupervised — global
+bash unsupervised_monthly/run_unsupervised_global.sh
 
-Without `--force-export`, the script will reuse an existing probability export if found, ensuring reproducibility.
+# Weakly-supervised — global
+bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly_global.sh
+```
+
+### 4. Export Inference Tables
+
+```bash
+python export_merged_monthly_inference_tables.py --pipelines all --year_start 2017 --year_end 2024
+```
 
 ### 5. Quick Diagnostic Checks
 
 ```bash
 # List produced probability files for a model
-ls -1 old_model_scripts_backup/unsupervised/model_runs/<model>/global/unsup_month_scores_all*.csv
+ls -1 unsupervised_monthly/model_runs/<embedding>/unsup_month_scores_all_*.csv
 
-# Head probabilities (verify month headers present)
-head -n 2 old_model_scripts_backup/unsupervised/model_runs/<model>/global/unsup_month_scores_all.csv
+# Verify month headers
+head -n 2 unsupervised_monthly/model_runs/<embedding>/unsup_month_scores_all_distance_baseline_new.csv
 
-# Confirm top-k file exists
-ls old_model_scripts_backup/unsupervised/model_runs/<model>/global/topk_all_global_all.csv
+# Check weakly-supervised outputs
+ls weakly_supervised_monthly/model_runs/<embedding>/unsup_month_scores_all_weakly_supervised.csv
 ```
 
-### 6. Aggregating Metrics Across Models
-
-Example (already prototyped in `test.ipynb`) building a unified margin vs accuracy table:
-
-```python
-import os, pandas as pd
-csv_dir = "old_model_scripts_backup/unsupervised/model_runs"  # adjust if different
-models = ["prithvi-2.0", "satmae", "satclip", "georsclip", "satlaspretrain", "dinov3"]
-results = {}
-for model in models:
-      mfile = os.path.join(csv_dir, model, "metrics_all.csv")
-      if not os.path.exists(mfile):
-            continue
-      df = pd.read_csv(mfile)
-      if not {"margin","acc"}.issubset(df.columns):
-            continue
-      for margin, acc in zip(df.margin, df.acc):
-            results.setdefault(margin, {})[model] = acc
-unified = (pd.DataFrame.from_dict(results, orient='index')
-                .rename_axis('margin').reset_index().sort_values('margin'))
-unified.to_csv(os.path.join(csv_dir, "all_models_metrics_all.csv"), index=False)
-print(unified.head())
-```
-
-### 7. Troubleshooting Quick Tips
+### 6. Troubleshooting
 
 | Symptom | Likely Cause | Action |
 |---------|-------------|--------|
-| Missing probability columns | Export skipped / reused stale file | Add `--force-export` and rerun script |
-| Different top-k vs manual softmax | Evaluation re-normalized | Ensure script passes `--score_norm_method none` in evaluation stage |
-| Model directory empty | Feature CSV pattern not matched | Verify filename contains `<model>_global_sites_grid` substring |
-| GPU OOM during extraction | Batch too large | Reduce batch size flag (if available) or use CPU fallback for small subset |
-| Misaligned month range | Start/End year mismatch | Re-extract features with consistent `--start-year 2017 --end-year 2024` |
-
-### 8. Minimal End-to-End (Single Model Example)
-
-```bash
-# 1. Extract features
-./extract_embeddings.sh --mode grid \
-   --model satmae \
-   --images-root planet_mosaics_final_4bands \
-   --output-csv planet_mosaics_final_4bands/features/features_satmae_global_sites_grid_1.0km2.csv \
-   --start-year 2017 --end-year 2024
-
-# 2. Run global unsupervised inference
-cd old_model_scripts_backup/unsupervised
-bash run_unsupervised_global_inference.sh --model satmae --force-export
-
-# 3. Inspect outputs
-head -n 2 satmae/unsup_month_scores_all.csv
-head -n 2 satmae/topk_all_global_all.csv
-```
+| Missing probability columns | Export skipped / stale file | Re-run the pipeline with `--force-export` if supported |
+| Model directory empty | Feature CSV not found | Verify extraction completed and output filename matches expected pattern |
+| GPU OOM during extraction | Batch too large | Use `--device cpu` or reduce input resolution |
+| Misaligned month range | Start/end year mismatch | Re-extract features with consistent `--start-year 2017 --end-year 2024` |
 
 ---
