@@ -1,7 +1,6 @@
-"""Distance utilities."""
-
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+"""Distance utilities."""
 
 import numpy as np
 
