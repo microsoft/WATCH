@@ -5,6 +5,7 @@ torch==2.3.1
 torchvision==0.18.1
 
 numpy==1.26.4
+scipy==1.15.3
 pandas==2.2.3
 scikit-learn==1.5.2
 scikit-image==0.26.0
@@ -21,3 +22,6 @@ requests==2.32.3
 # Azure OpenAI & auth for monthly GPT analysis (optional)
 openai==2.15.0
 azure-identity==1.15.0
+
+# Model downloads from Hugging Face
+huggingface-hub==0.28.1
