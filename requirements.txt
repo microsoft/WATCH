@@ -1,8 +1,8 @@
 # Pinned dependencies for reproducible installs.
 # Verified on 2026-01-22.
 
-torch==2.6.0
-torchvision==0.21.0
+torch==2.8.0
+torchvision==0.23.0
 
 numpy==1.26.4
 scipy==1.15.3
@@ -17,11 +17,11 @@ rasterio==1.4.4
 
 matplotlib==3.9.2
 seaborn==0.13.2
-requests==2.32.3
+requests==2.32.4
 
 # Azure OpenAI & auth for monthly GPT analysis (optional)
 openai==2.15.0
-azure-identity==1.15.0
+azure-identity==1.16.1
 
 # Model downloads from Hugging Face
 huggingface-hub==0.28.1
