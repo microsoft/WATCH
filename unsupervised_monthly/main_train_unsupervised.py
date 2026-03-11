@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+"""Training and scoring entry point for unsupervised monthly change detection."""
+
 import os
 from pathlib import Path
 import argparse
@@ -17,6 +19,14 @@ from .utils import knn_density, robust_zscore, normalize_scores
 
 
 def _resolve_output_dir(output_dir: str) -> str:
+    """Resolve a potentially relative output directory against the package directory.
+
+    Args:
+        output_dir: Absolute or relative path for model outputs.
+
+    Returns:
+        Absolute path string.
+    """
     # Resolve relative paths against the package directory to avoid nested CWD resolutions
     if os.path.isabs(output_dir):
         return output_dir
@@ -25,6 +35,20 @@ def _resolve_output_dir(output_dir: str) -> str:
 
 
 def make_loader(ds, batch, workers, pin_memory=True, persistent_workers=False, prefetch_factor=2, drop_last=True):
+    """Create a DataLoader with sensible defaults.
+
+    Args:
+        ds: PyTorch Dataset to wrap.
+        batch: Batch size.
+        workers: Number of data-loading worker processes.
+        pin_memory: Whether to pin memory for faster GPU transfers.
+        persistent_workers: Whether to keep workers alive between epochs.
+        prefetch_factor: Number of batches to prefetch per worker.
+        drop_last: Whether to drop the last incomplete batch.
+
+    Returns:
+        Configured DataLoader instance.
+    """
     return DataLoader(
         ds,
         batch_size=batch,
@@ -38,6 +62,18 @@ def make_loader(ds, batch, workers, pin_memory=True, persistent_workers=False, p
 
 
 def compute_and_save_scaler(args):
+    """Compute and save feature normalization statistics to an .npz file.
+
+    Computes global and per-month mean/std and median/MAD from the training
+    split of the features CSV.  Skips recomputation if the file already exists
+    unless ``--overwrite_scaler`` is set.
+
+    Args:
+        args: Parsed command-line arguments (must include ``scaler_path``,
+            ``features_csv``, ``groundtruth_csv``, ``split_col``,
+            ``robust_scaler``, ``overwrite_scaler``, and
+            ``disable_per_month_feature_norm``).
+    """
     if args.scaler_path is None:
         return
     if os.path.exists(args.scaler_path) and not args.overwrite_scaler:
@@ -132,6 +168,15 @@ def compute_and_save_scaler(args):
 
 
 def train(args):
+    """Run the unsupervised training loop.
+
+    Trains a masked autoencoder, next-month forecaster, temporal transformer,
+    and Barlow Twins projection head jointly.  The best checkpoint (by training
+    loss) is saved to ``args.output_dir``.
+
+    Args:
+        args: Parsed command-line arguments.
+    """
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     compute_and_save_scaler(args)
@@ -260,6 +305,15 @@ def train(args):
 
 
 def export_month_scores(args):
+    """Load a trained checkpoint and export per-site monthly anomaly scores.
+
+    For each site the reconstruction error, forecast error, and novelty
+    (KNN density) are fused into a single score per month and written to a
+    CSV file.
+
+    Args:
+        args: Parsed command-line arguments.
+    """
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
     out_dir = _resolve_output_dir(args.output_dir)
     ckpt_path = args.trained_model if getattr(args, "trained_model", None) else os.path.join(out_dir, "unsup_models.pt")
@@ -282,6 +336,14 @@ def export_month_scores(args):
     mae.eval(); fore.eval(); trunk.eval()
 
     def score_one_site(x: torch.Tensor):
+        """Compute reconstruction, forecast, and novelty scores for one site.
+
+        Args:
+            x: Feature tensor of shape (T, F) for a single site.
+
+        Returns:
+            Tuple of (rec_err, fore_err, novelty) arrays, each of shape (T,).
+        """
         with torch.no_grad():
             l_mae, recon, _ = mae(x.unsqueeze(0))
             rec_err = ((recon - x.unsqueeze(0))**2).mean(dim=-1).squeeze(0).cpu().numpy()
