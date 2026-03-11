@@ -13,6 +13,17 @@ MONTHS = [f"{y}_{m:02d}" for y in range(2017, 2025) for m in range(1, 13)]  # 96
 T = len(MONTHS)
 
 def load_scaler_npz(scaler_path: str | None, F: int):
+    """Load feature normalization statistics from an .npz file.
+
+    Args:
+        scaler_path: Path to the .npz file containing scaler statistics.
+            If None or the file does not exist, identity statistics are returned.
+        F: Number of features (used to initialise default mean/std arrays).
+
+    Returns:
+        Dictionary with keys 'mean', 'std', and optionally 'month_mean',
+        'month_std', 'feat_median', 'feat_mad', etc.
+    """
     out = {}
     out["mean"] = np.zeros(F, dtype=np.float32)
     out["std"] = np.ones(F, dtype=np.float32)
@@ -37,8 +48,28 @@ def load_scaler_npz(scaler_path: str | None, F: int):
     return out
 
 class UnsupervisedSiteDataset(Dataset):
+    """Dataset of per-site monthly feature time series.
+
+    Loads feature vectors from a CSV, normalises them using precomputed
+    statistics, interpolates missing months, and exposes each site as a
+    (T, F) tensor.
+    """
+
     def __init__(self, features_csv: str, gt_csv: str | None, split: str, scaler_path: str | None,
                  split_col: str = "split", per_month_feature_norm: bool = True, robust: bool = False):
+        """Initialize UnsupervisedSiteDataset.
+
+        Args:
+            features_csv: Path to the CSV containing per-site monthly features.
+            gt_csv: Path to a ground-truth CSV with site labels and splits.
+                If None, all sites default to the 'train' split.
+            split: One of 'train', 'val', 'test', 'all', or 'all_looted'.
+            scaler_path: Path to an .npz file with normalization statistics.
+            split_col: Column name in gt_csv that indicates the split.
+            per_month_feature_norm: Whether to apply per-month normalisation
+                before global normalisation.
+            robust: If True, use median/MAD statistics instead of mean/std.
+        """
         super().__init__()
         self.fdf = pd.read_csv(features_csv)
         self.feature_cols = sorted([c for c in self.fdf.columns if c.startswith("f") and c[1:].isdigit()], key=lambda x: int(x[1:]))
@@ -123,9 +154,20 @@ class UnsupervisedSiteDataset(Dataset):
             self.tensors.append(torch.tensor(mat, dtype=torch.float32))
 
     def __len__(self):
+        """Return the number of sites in the dataset."""
         return len(self.sites)
 
     def __getitem__(self, i):
+        """Return the feature tensor, site name, and preservation label for a site.
+
+        Args:
+            i: Index of the site.
+
+        Returns:
+            Tuple of (features, site_name, preserved) where features is a
+            (T, F) tensor, site_name is a string, and preserved is 0
+            (looted), 1 (preserved), or -1 (unknown).
+        """
         x = self.tensors[i]
         s = self.sites[i]
         pres = self.preserved.get(s, -1)
