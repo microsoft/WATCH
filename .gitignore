@@ -31,6 +31,7 @@ related_papers/
 .vscode/
 logs/
 results/
+change_detection/plot_looting_months_and_splits.py
 
 # Large subdirectories within kept folders
 unsupervised/model_runs/
