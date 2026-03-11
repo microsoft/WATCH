@@ -1,0 +1,29 @@
+# Azure Pipelines (template)
+#
+# This pipeline is intended to be used in Azure DevOps and can be extended to
+# run the Component Governance Tool (component detection) and basic checks.
+
+trigger:
+- main
+
+pool:
+  vmImage: ubuntu-latest
+
+steps:
+- task: UsePythonVersion@0
+  inputs:
+    versionSpec: '3.11'
+  displayName: 'Use Python'
+
+- script: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+  displayName: 'Install dependencies'
+
+- script: |
+    python -m compileall -q .
+  displayName: 'Compile Python'
+
+# Enable Component Governance in the pipeline (requires org/project configuration)
+- task: ComponentGovernanceComponentDetection@0
+  displayName: 'Component Detection'

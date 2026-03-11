@@ -1,0 +1,163 @@
+############################################
+# Large data / models / outputs to exclude #
+############################################
+# Exclude: virtual environments, looting/, and other large directories
+# Also exclude archived/legacy pipelines and resources:
+#   - unsupervised/
+#   - weakly_super_cd/
+#   - unsupervised_monthly/old_resources/
+
+# Virtual environments
+looting/
+venv/
+env/
+dafals/
+
+# Large data directories
+looted-exp-new-change-detection/
+planet_mosaics_final_4bands/
+huggingface_models/
+huggingface_models_backup/
+
+# Code directories (exclude to keep repo small; allowlist unsupervised/ and weakly_super_cd/ below)
+models/
+training/
+evaluation/
+utils/
+config/
+dinov3/
+old_model_scripts_backup/
+related_papers/
+.vscode/
+logs/
+results/
+change_detection/plot_looting_months_and_splits.py
+
+# Large subdirectories within kept folders
+unsupervised/model_runs/
+unsupervised/old_results/
+unsupervised/masked_exp/
+unsupervised/model_runs_masked_exp/
+weakly_super_cd/evaluation_runs_masked/
+unsupervised_monthly/old_resources/
+
+# One-off large archives / backups
+weakly_super_cd_backed_08_Aug.zip
+weakly_super_cd_new_no_encoder.zip
+self_supervised_cd.zip
+previous_git_pack_backup.tgz
+
+# Model / weight / binary artefacts
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.npz
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+*.db
+
+# Media / large visuals
+*.gif
+*.mp4
+*.mov
+
+# Logs & transient
+*.log
+tmux-client-*.log
+model_download.log
+
+# Python caches
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+.cache/
+.tmp/
+*.pyc
+
+# Notebooks (optional - comment out if you want to keep some)
+getstart_dinov3.ipynb
+getting_resuts_figures.ipynb
+test.ipynb
+
+# ------------------------------------------------------------
+# Global ignore: ignore everything by default then allowlist
+# ------------------------------------------------------------
+# Ignore all files
+/*
+
+# Allowlist core directories requested
+!/self_supervised_change_detection/
+!/weakly_supervised/
+!/temporal_embedding_distance/
+# Legacy names (kept in case old paths exist)
+!/unsupervised_monthly/
+!/weakly_supervised_monthly/
+
+# Allowlist only the gitignore file at repo root
+!/.gitignore
+
+# Allowlist a small set of top-level utilities/docs
+!/README.md
+!/SECURITY.md
+!/LICENSE
+!/THIRD_PARTY_NOTICES.md
+!/CONTRIBUTING.md
+!/azure-pipelines.yml
+!/requirements.txt
+!/figures/
+!/download_hf_models.py
+!/export_merged_monthly_inference_tables.py
+!/extract_embeddings_unified_modified.py
+!/extract_embeddings.sh
+!/feature_extraction.py
+
+
+# Allow scripts in unsupervised already via dir allow; still ignore heavy outputs within
+unsupervised/model_runs/
+unsupervised/old_results/
+
+# Ignore heavy outputs in self_supervised_change_detection
+self_supervised_change_detection/model_runs/
+self_supervised_change_detection/model_runs_old/
+self_supervised_change_detection/old_results/
+self_supervised_change_detection/old_resources/
+self_supervised_change_detection/results/
+self_supervised_change_detection/results_old/
+self_supervised_change_detection/global_results/
+
+# Ignore heavy outputs in temporal_embedding_distance
+temporal_embedding_distance/model_runs/
+temporal_embedding_distance/results/
+temporal_embedding_distance/global_results/
+
+# Also ignore heavy outputs for weakly_supervised
+weakly_supervised/model_runs/
+weakly_supervised/model_runs_old/
+weakly_supervised/results/
+weakly_supervised/results_old/
+weakly_supervised/global_results/
+
+# Legacy names for backward compat
+unsupervised_monthly/model_runs/
+unsupervised_monthly/old_results/
+unsupervised_monthly/old_resources/
+unsupervised_monthly/results/
+unsupervised_monthly/global_results/
+weakly_supervised_monthly/model_runs/
+weakly_supervised_monthly/results/
+weakly_supervised_monthly/global_results/
+# Ignore local LaTeX docs under unsupervised_monthly
+unsupervised_monthly/methods.tex
+
+# Keep versioned notebooks only if explicitly unignored (currently ignored)
+
+# Prior git backup (never commit again)
+.git_old/
+
+# Temporary paper/figure generation scripts (not part of public release)
+generate_*.py
+
+# DO NOT list README.md or core code files here (ensure they are tracked)
