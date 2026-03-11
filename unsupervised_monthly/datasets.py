@@ -1,7 +1,7 @@
-"""Dataset and month indexing utilities for monthly pipelines."""
-
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+"""Dataset and month indexing utilities for monthly pipelines."""
 
 import os
 import numpy as np

@@ -1,7 +1,7 @@
-"""Losses and criteria."""
-
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+"""Losses and criteria."""
 
 import torch
 import torch.nn as nn

@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+"""LSTM-based model for weakly-supervised monthly change detection."""
+
 from __future__ import annotations
 
 import torch

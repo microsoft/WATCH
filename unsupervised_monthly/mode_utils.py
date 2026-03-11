@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+"""Canonical mode names and alias resolution."""
+
 from __future__ import annotations
 
 from typing import Optional

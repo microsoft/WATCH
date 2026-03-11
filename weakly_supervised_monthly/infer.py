@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
+
+"""Inference script for the weakly-supervised change detector."""
+
 from __future__ import annotations
 
 import argparse

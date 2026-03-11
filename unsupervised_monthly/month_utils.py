@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
 
+"""Month indexing and string normalisation helpers."""
+
 from __future__ import annotations
 import os
 from typing import List, Tuple

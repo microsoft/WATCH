@@ -1,6 +1,8 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-# feature_extraction.py
+
+"""Spectral indices and texture feature extraction from satellite imagery."""
+
 import numpy as np
 from skimage.filters import sobel
 from skimage.measure import shannon_entropy
