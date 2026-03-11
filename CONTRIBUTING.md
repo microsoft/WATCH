@@ -4,7 +4,7 @@
 
 Code reviews should be performed using the team’s Azure DevOps process and guidelines.
 
-- Guidelines: https://onecela.visualstudio.com/AI%20For%20Good%20Lab/_wiki/wikis/AI-For-Good-Lab.wiki?wikiVersion=GBwikiMaster&pagePath=/Data%20Science%20Platform%20%26%20DevOps/Source%20Code%20Management/Code%20Reviews
+- Guidelines: [Code Review Guidelines](https://onecela.visualstudio.com/AI%20For%20Good%20Lab/_wiki/wikis/AI-For-Good-Lab.wiki?wikiVersion=GBwikiMaster&pagePath=/Data%20Science%20Platform%20%26%20DevOps/Source%20Code%20Management/Code%20Reviews)
 
 ## Development workflow
 

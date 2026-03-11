@@ -272,10 +272,10 @@ The system evaluates:
 
 ## Requirements
 
-- Python 3.11+ (tested with 3.11)
-- PyTorch 2.3+
-- Rasterio for GeoTIFF processing
-- All pinned dependencies in `requirements.txt`
+- Python 3.11 (tested with 3.11)
+- PyTorch version as specified in `requirements.txt`
+- Rasterio version as specified in `requirements.txt`
+- All dependencies are pinned in `requirements.txt`
 
 ## License
 
@@ -310,7 +310,7 @@ All feature extraction goes through the unified entry point:
 # Global grid embeddings (optional, for large-area tiling)
 ./extract_embeddings.sh --mode grid \
    --model satmae \
-   --images-root planet_mosaics_final_4bands \
+   --images-root planet_mosaics_final_4bands/images \
    --start-year 2017 --end-year 2024 \
    --output-dir planet_mosaics_final_4bands/features_unified_global_without_mask
 ```
