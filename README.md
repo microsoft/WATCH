@@ -1,4 +1,43 @@
-# Archaeological Change Detection (Monthly Pipelines)
+# WATCH: Wide-Area Archaeological Site Tracking for Change Detection
+
+Monitoring archaeological sites at scale is critical for cultural heritage preservation, yet remains challenging due to sparse ground truth, subtle visual signals, and the need to determine *when* disturbances occur rather than merely *whether* they occurred.
+We introduce **WATCH**, a framework for temporal change detection that operates on foundation-model embeddings extracted from Planet Labs monthly satellite mosaics (2017 to 2024, 4.7 m/px).
+WATCH supports two complementary pipelines: (i) an unsupervised scoring approach that detects temporal deviations through distance-based and learned ensemble signals, and (ii) a weakly supervised temporal localization model trained with sparse, temporally truncated labels.
+We evaluate WATCH on 1,943 archaeological sites in Afghanistan using embeddings from six geospatial foundation models alongside handcrafted spectral and texture features, and further test generalization on sites in Syria, Turkey, Pakistan, and Egypt.
+Unsupervised methods consistently match or exceed weakly supervised alternatives, while handcrafted features remain competitive under certain scoring regimes.
+Directional margin analysis reveals systematic temporal biases across methods, providing actionable insight for configuring early-warning versus confirmation-oriented monitoring.
+Overall, WATCH demonstrates that foundation-model embeddings, combined with label-efficient temporal scoring, enable scalable and operationally meaningful monitoring of archaeological sites.
+
+## Framework Overview
+
+<p align="center">
+  <img src="figures/fig_watch_framework.png" alt="WATCH Framework Overview" width="100%">
+</p>
+
+**Figure:** Overview of the WATCH framework. (a) PlanetScope monthly mosaics (RGB+NIR, 4.7 m/px, 2017–2024) are processed into 1 km² site patches with binary masks for 1,943 archaeological sites in Afghanistan. (b) Foundation-model embeddings and handcrafted features are extracted and temporally normalized, then scored via three complementary pipelines: a distance baseline, a learned unsupervised ensemble, and a weakly supervised temporal model, each producing a monthly change score. (c) Scores are converted to change probabilities and evaluated using Recall@K with symmetric and directional temporal margins, supporting heritage monitoring, looting detection, and temporal analysis applications.
+
+## Global Distribution of Archaeological Sites
+
+<p align="center">
+  <img src="figures/global_sites_highlight_countries_clean%20(1).png" alt="Global distribution of archaeological sites" width="90%">
+</p>
+
+**Figure:** Global distribution of sites with highlighted countries of interest.
+
+## Examples of Looted Sites
+
+<p align="center">
+  <img src="figures/looted_694_png_modified.png" alt="Looted site 694" width="50%"><br>
+  <img src="figures/looted_700_png_modified.png" alt="Looted site 700" width="50%"><br>
+  <img src="figures/looted_720_png_modified.png" alt="Looted site 720" width="50%"><br>
+  <img src="figures/looted_708_png_modified.png" alt="Looted site 708" width="50%">
+</p>
+
+**Figure:** Examples of Afghanistan archaeological sites for which the month of looting is known. The months preceding the observed looting, the month of looting itself (shown in red), and the following month are shown to illustrate the temporal progression of looting activity.
+
+---
+
+## Pipelines
 
 This repository provides a standardized, end-to-end month-level change detection workflow based on:
 
@@ -12,7 +51,7 @@ All three pipelines output a per-site probability distribution over months (colu
 
 ---
 
-## 0) Data Layout
+## 1) Data Layout
 
 The maintained monthly pipelines assume:
 
@@ -39,7 +78,7 @@ Ground-truth CSV requirements (minimum):
 
 ---
 
-## 1) Installation
+## 2) Installation
 
 The runners assume an environment with the repo dependencies installed. The provided shell runners default to a local venv named `change_detect`.
 
@@ -67,7 +106,7 @@ Third-party dependency attributions are listed in `THIRD_PARTY_NOTICES.md`.
 
 ---
 
-## 2) Feature Extraction (One Standard Entry Point)
+## 3) Feature Extraction (One Standard Entry Point)
 
 Use the unified extractor wrapper:
 
@@ -75,7 +114,7 @@ Use the unified extractor wrapper:
 ./extract_embeddings.sh --help
 ```
 
-### 2.1 Afghanistan / per-site monthly embeddings (recommended)
+### 3.1 Afghanistan / per-site monthly embeddings (recommended)
 
 This produces one embedding per `(site_name, month)` and writes a CSV with columns:
 `site_name, month, f0..fN`.
@@ -124,7 +163,7 @@ Then extract features, e.g.:
    --output-dir planet_mosaics_final_4bands/features_unified_new_with_mask
 ```
 
-### 2.2 Global / grid embeddings (optional)
+### 3.2 Global / grid embeddings (optional)
 
 If you are running global site collections where each site is large and should be tiled into km² grids, use:
 
@@ -139,7 +178,7 @@ Grid outputs include `grid_id, lon, lat` columns and are separate from the month
 
 ---
 
-## 3) Run Monthly Pipelines
+## 4) Run Monthly Pipelines
 
 All runners assume you activated the environment:
 
@@ -147,7 +186,7 @@ All runners assume you activated the environment:
 source change_detect/bin/activate
 ```
 
-### 3.1 Unsupervised monthly: Distance baseline mode
+### 4.1 Unsupervised monthly: Distance baseline mode
 
 Start runs (one tmux session per embedding), then merge/evaluate/aggregate:
 
@@ -166,7 +205,7 @@ Outputs:
 - Per-embedding metrics:
    - `unsupervised_monthly/results/<embedding>/<embedding>_distance_baseline_{test|all}_metrics{,_positive,_negative}.csv`
 
-### 3.2 Unsupervised monthly: Learned unsupervised mode
+### 4.2 Unsupervised monthly: Learned unsupervised mode
 
 ```bash
 # Start tmux sessions (all default embeddings)
@@ -181,7 +220,7 @@ Outputs:
 - Unified score matrix (per embedding):
    - `unsupervised_monthly/model_runs/<embedding>/unsup_month_scores_all_learned_unsupervised_new.csv`
 
-### 3.3 Weakly-supervised monthly
+### 4.3 Weakly-supervised monthly
 
 This trains a lightweight sequence model using month labels only up to a cutoff (default `LABEL_END_MONTH=2020_12`), then exports a full `2017_01..2024_12` probability table.
 
@@ -208,9 +247,9 @@ The default knobs for each pipeline are documented in the runner scripts themsel
 
 ---
 
-## 4) Evaluation + Inference Tables
+## 5) Evaluation + Inference Tables
 
-### 4.1 Export a single “all sites × all months” inference table
+### 5.1 Export a single "all sites × all months" inference table
 
 This materializes stable inference tables under each pipeline’s `results/<embedding>/` folder:
 
@@ -226,7 +265,7 @@ Examples of exported artifacts:
 
 Each has columns: `site_name, known_month_of_change, 2017_01..2024_12`.
 
-### 4.2 Aggregated recall tables (monthly / top-k / margins)
+### 5.2 Aggregated recall tables (monthly / top-k / margins)
 
 The pipeline runners call the evaluator automatically, but you can run it manually:
 
@@ -371,5 +410,20 @@ ls weakly_supervised_monthly/model_runs/<embedding>/unsup_month_scores_all_weakl
 | Model directory empty | Feature CSV not found | Verify extraction completed and output filename matches expected pattern |
 | GPU OOM during extraction | Batch too large | Use `--device cpu` or reduce input resolution |
 | Misaligned month range | Start/end year mismatch | Re-extract features with consistent `--start-year 2017 --end-year 2024` |
+
+---
+
+## Citation
+
+If you use WATCH in your research, please cite:
+
+```bibtex
+@article{tadesse2026watch,
+  title={WATCH: Wide-Area Archaeological Site Tracking for Change Detection},
+  author={Tadesse, Girmaw Abebe and Bartette, Titien and Hassanali, Andrew and Kim, Allen and Chemla, Jonathan and Zolli, Andrew and Ubelmann, Yves and Robinson, Caleb and Becker-Reshef, Inbal and Ferres, Juan Lavista},
+  journal={arXiv preprint},
+  year={2026}
+}
+```
 
 ---
