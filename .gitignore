@@ -103,6 +103,7 @@ test.ipynb
 !/CONTRIBUTING.md
 !/azure-pipelines.yml
 !/requirements.txt
+!/figures/
 !/download_hf_models.py
 !/export_merged_monthly_inference_tables.py
 !/extract_embeddings_unified_modified.py
