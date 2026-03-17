@@ -19,18 +19,32 @@ import os
 from pathlib import Path
 import pandas as pd
 
-from .mode_utils import CANONICAL_MODES, is_legacy_mode, normalize_mode
+from .mode_utils import CANONICAL_MODES, MODE_ALIASES, is_legacy_mode, normalize_mode
+
+
+def _find_metrics_file(emb_dir: Path, emb: str, mode: str, split: str, variant: str) -> Path | None:
+    """Try canonical and legacy mode names to find a metrics CSV."""
+    # Collect candidate mode names: canonical first, then any legacy aliases
+    candidates = [mode]
+    for alias, canonical in MODE_ALIASES.items():
+        if canonical == mode and alias != mode:
+            candidates.append(alias)
+    for m in candidates:
+        if variant:
+            p = emb_dir / f"{emb}_{m}_{split}_metrics_{variant}.csv"
+        else:
+            p = emb_dir / f"{emb}_{m}_{split}_metrics.csv"
+        if p.exists():
+            return p
+    return None
 
 
 def collect_recall_matrix(results_root: Path, split: str, mode: str, max_margin: int = 6, variant: str = "") -> pd.DataFrame:
     rows = {}
     for emb_dir in sorted([p for p in results_root.iterdir() if p.is_dir()]):
         emb = emb_dir.name
-        suffix = "" if variant == "" else f"_metrics_{variant}.csv"
-        metrics_path = emb_dir / f"{emb}_{mode}_{split}_metrics.csv"
-        if variant:
-            metrics_path = emb_dir / f"{emb}_{mode}_{split}_metrics_{variant}.csv"
-        if not metrics_path.exists():
+        metrics_path = _find_metrics_file(emb_dir, emb, mode, split, variant)
+        if metrics_path is None:
             continue
         try:
             df = pd.read_csv(metrics_path)

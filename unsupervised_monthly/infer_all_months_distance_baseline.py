@@ -22,9 +22,10 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from .datasets import MONTHS, T, load_scaler_npz
-from .utils import normalize_scores
+from .utils import normalize_scores, robust_zscore
 
 
 def _split_cols(s: str) -> list[str]:
@@ -73,6 +74,8 @@ def parse_args():
     ap.add_argument("--distance", type=str, default="l2", choices=["l2", "cosine"])
     ap.add_argument("--robust_scaler", action="store_true")
     ap.add_argument("--disable_per_month_feature_norm", action="store_true")
+    ap.add_argument("--rw_window", type=int, default=12, help="Rolling window size for robust z-score calibration (default: 12). Set to 0 to disable.")
+    ap.add_argument("--negative_z_ok", action="store_true", help="Allow negative z-scores (default: clip to positive).")
 
     ap.add_argument(
         "--score_norm_method",
@@ -145,7 +148,6 @@ def main():
         month_std = None
 
     grp = df.groupby(group_cols, sort=False)
-    keys = list(grp.groups.keys())
 
     rows: list[dict] = []
     idx = np.arange(T)
@@ -153,8 +155,9 @@ def main():
 
     dist_fn = _l2 if args.distance == "l2" else _cosine
 
-    for key in keys:
-        sdf = grp.get_group(key)
+    for key, sdf in tqdm(grp, desc="prepare+infer", dynamic_ncols=True):
+        if isinstance(key, tuple) and len(group_cols) == 1:
+            key = key[0]
         meta = {c: sdf.iloc[0][c] for c in meta_cols} if meta_cols else {}
 
         mat = np.full((T, input_dim), np.nan, dtype=np.float32)
@@ -195,6 +198,8 @@ def main():
             baseline = np.median(mat[a:t, :], axis=0)
             scores[t] = float(dist_fn(mat[t, :], baseline))
 
+        if int(args.rw_window) > 0:
+            scores = robust_zscore(scores, window=int(args.rw_window), positive_only=(not args.negative_z_ok))
         probs = normalize_scores(scores, method=args.score_norm_method, temperature=float(args.score_norm_temperature))
         probs = np.nan_to_num(probs, nan=0.5, posinf=1.0, neginf=0.0).astype(np.float32)
 
@@ -211,8 +216,7 @@ def main():
             row[mm] = float(probs[mi])
         rows.append(row)
 
-        if args.verbose and (len(rows) % 100 == 0):
-            print(f"[progress] processed {len(rows)}/{len(keys)} instances")
+
 
     out_cols = group_cols + meta_cols + ["mode"] + MONTHS
     out_df = pd.DataFrame(rows, columns=out_cols)

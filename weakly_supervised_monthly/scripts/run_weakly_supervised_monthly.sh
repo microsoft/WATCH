@@ -44,7 +44,7 @@ mkdir -p "$MODEL_RUNS_DIR" "$RESULTS_DIR"
 TOP_K="${TOP_K:-12}"
 MAX_MARGIN="${MAX_MARGIN:-6}"
 YEAR_START="${YEAR_START:-2017}"
-YEAR_END="${YEAR_END:-2024}"
+YEAR_END="${YEAR_END:-2020}"
 
 declare -A EMBED_MAP=(
   [CLIP]="clip"
@@ -192,11 +192,11 @@ python -u "${REPO_ROOT}/export_merged_monthly_inference_tables.py" \
   --pipelines weakly_supervised_monthly \
   --only_embedding "${embed_id}" \
   --year_start 2017 --year_end 2024
-rc=$?
-if [[ $rc -ne 0 ]]; then
-  echo "[error] export merged inference failed rc=$rc"
+rc=\$?
+if [[ \$rc -ne 0 ]]; then
+  echo "[error] export merged inference failed rc=\$rc"
   [[ "${keep_open}" == "1" ]] && exec bash
-  exit $rc
+  exit \$rc
 fi
 
 echo "[done] ${embed_id}"

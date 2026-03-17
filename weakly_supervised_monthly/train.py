@@ -20,8 +20,20 @@ from .dataset import SiteTimeSeriesDataset, T, LabelWindow
 from .model import LSTMChangeDetector
 
 
-def _make_targets(looted: torch.Tensor, known_idx: torch.Tensor, label_window: LabelWindow) -> torch.Tensor:
-    """Build (B,T) targets in [0,1] for BCE training on the time head."""
+def _make_targets(
+    looted: torch.Tensor,
+    known_idx: torch.Tensor,
+    label_window: LabelWindow,
+    asymmetric: bool = False,
+    sigma_before: float = 0.5,
+    sigma_after: float = 2.0,
+) -> torch.Tensor:
+    """Build (B,T) targets in [0,1] for BCE training on the time head.
+
+    When asymmetric=True, uses different sigmas for months before vs. after the
+    looting event, reflecting that looting damage persists visibly in imagery
+    for many months after it occurs (wider right tail).
+    """
     B = looted.shape[0]
     targets = torch.zeros((B, T), dtype=torch.float32, device=looted.device)
 
@@ -37,9 +49,14 @@ def _make_targets(looted: torch.Tensor, known_idx: torch.Tensor, label_window: L
         right = min(T - 1, c + w)
         pos = torch.arange(left, right + 1, device=looted.device)
         if label_window.smooth_type == "gauss" and w > 0:
-            sigma = max(1.0, w / 2.0)
             d = (pos - c).float()
-            vals = torch.exp(-(d * d) / (2.0 * sigma * sigma))
+            if asymmetric:
+                sig_b = max(1e-3, sigma_before * max(1.0, w / 2.0))
+                sig_a = max(1e-3, sigma_after * max(1.0, w / 2.0))
+                sigma_vals = torch.where(d < 0, sig_b, sig_a)
+            else:
+                sigma_vals = torch.full_like(d, max(1.0, w / 2.0))
+            vals = torch.exp(-(d * d) / (2.0 * sigma_vals * sigma_vals))
             vals = vals / vals.max().clamp_min(1e-8)
         else:
             vals = torch.ones_like(pos, dtype=torch.float32)
@@ -68,6 +85,16 @@ def parse_args():
 
     ap.add_argument("--label_window", type=int, default=1, help="Label smoothing radius in months")
     ap.add_argument("--label_smooth_type", type=str, default="gauss", choices=["gauss", "box"])
+
+    ap.add_argument("--asymmetric_target", action="store_true",
+                    help="Use asymmetric Gaussian target: tighter before looting, broader after (damage persists).")
+    ap.add_argument("--sigma_before", type=float, default=0.5,
+                    help="Scale factor for sigma on the pre-looting side when --asymmetric_target is set.")
+    ap.add_argument("--sigma_after", type=float, default=2.0,
+                    help="Scale factor for sigma on the post-looting side when --asymmetric_target is set.")
+
+    ap.add_argument("--bidirectional", action="store_true",
+                    help="Use a bidirectional LSTM (valid for offline/retrospective looting detection).")
 
     ap.add_argument(
         "--pos_weight",
@@ -170,6 +197,7 @@ def main():
         enc_hidden=args.enc_hidden,
         lstm_hidden=args.lstm_hidden,
         lstm_layers=args.lstm_layers,
+        bidirectional=args.bidirectional,
     ).to(device)
 
     opt = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
@@ -207,7 +235,10 @@ def main():
             known_idx = known_idx.to(device, non_blocking=True)
 
             t_logits = model.forward_time_logits(feats)
-            targets = _make_targets(looted, known_idx, lw)
+            targets = _make_targets(looted, known_idx, lw,
+                                    asymmetric=args.asymmetric_target,
+                                    sigma_before=float(args.sigma_before),
+                                    sigma_after=float(args.sigma_after))
 
             loss = bce(t_logits, targets)
             if not torch.isfinite(loss):
@@ -254,6 +285,10 @@ def main():
         "early_stop_patience": args.early_stop_patience,
         "label_window": args.label_window,
         "label_smooth_type": args.label_smooth_type,
+        "asymmetric_target": args.asymmetric_target,
+        "sigma_before": args.sigma_before,
+        "sigma_after": args.sigma_after,
+        "bidirectional": args.bidirectional,
     }
     (out_dir / "train_config.json").write_text(json.dumps(meta, indent=2))
     print(f"[ok] saved model -> {out_dir / 'model.pt'}")

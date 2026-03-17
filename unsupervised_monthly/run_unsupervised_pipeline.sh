@@ -19,11 +19,11 @@ set -euo pipefail
 #   SCORE_NORM_METHOD (default sigmoid)
 #   SCORE_NORM_TEMPERATURE (default 1.0)
 #   EXPORT_PROB (default 1)
-#   TOP_K (default 24)
+#   TOP_K (default 12)
 #   MAX_MARGIN (default 6)
 #   DIRECTIONAL_MARGINS (default 1)
 #   STRATIFIED_YEAR (default 1; set 0 to pass --no-stratified_year)
-#   YEAR_START/YEAR_END (optional; e.g., 2017 and 2020)
+#   YEAR_START/YEAR_END (default 2017/2020)
 
 REPO_ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 cd "$REPO_ROOT"
@@ -35,12 +35,12 @@ SPLIT="${SPLIT:-all}"
 SCORE_NORM_METHOD="${SCORE_NORM_METHOD:-sigmoid}"
 SCORE_NORM_TEMPERATURE="${SCORE_NORM_TEMPERATURE:-1.0}"
 EXPORT_PROB="${EXPORT_PROB:-1}"
-TOP_K="${TOP_K:-24}"
+TOP_K="${TOP_K:-12}"
 MAX_MARGIN="${MAX_MARGIN:-6}"
 DIRECTIONAL_MARGINS="${DIRECTIONAL_MARGINS:-1}"
 STRATIFIED_YEAR="${STRATIFIED_YEAR:-1}"
-YEAR_START="${YEAR_START:-}"
-YEAR_END="${YEAR_END:-}"
+YEAR_START="${YEAR_START:-2017}"
+YEAR_END="${YEAR_END:-2020}"
 # Custom model runs and results directories
 MODEL_RUNS_DIR="${MODEL_RUNS_DIR:-unsupervised_monthly/model_runs}"
 RESULTS_DIR="${RESULTS_DIR:-unsupervised_monthly/results}"
@@ -58,7 +58,7 @@ declare -A EMBED_MAP=(
   [SATCLIP]="satclip"
 )
 
-DEFAULT_LABELS=(CLIP GEORSCLIP HANDCRAFTED PRITHIVI SATLASPRETRAIN SATMAE DINOV3 SATCLIP)
+DEFAULT_LABELS=(CLIP GEORSCLIP HANDCRAFTED PRITHIVI SATLASPRETRAIN SATMAE DINOV3)
 
 unified_csv_for() {
   local embed_id="$1"

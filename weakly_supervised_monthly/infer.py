@@ -18,6 +18,53 @@ from .month_utils import MONTHS, T
 from .model import LSTMChangeDetector, infer_arch_from_state_dict
 
 
+def _robust_zscore(x: np.ndarray, window: int = 12, positive_only: bool = True, eps: float = 1e-8) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float32)
+    T_len = x.shape[0]
+    z = np.zeros_like(x)
+    for t in range(T_len):
+        a = max(0, t - window)
+        b = min(T_len, t + window + 1)
+        win = x[a:b]
+        wfin = np.isfinite(win)
+        if not wfin.any():
+            z[t] = 0.0
+            continue
+        w = win[wfin]
+        med = np.median(w)
+        mad = np.median(np.abs(w - med))
+        if (not np.isfinite(mad)) or (mad < eps):
+            mu, sd = np.mean(w), np.std(w)
+            if (not np.isfinite(sd)) or (sd < eps):
+                z[t] = 0.0
+                continue
+            val = (x[t] - mu) / (sd + eps)
+        else:
+            val = (x[t] - med) / (mad + eps)
+        z[t] = max(0.0, float(val)) if positive_only else float(val)
+    return z
+
+
+def _normalize_scores(scores: np.ndarray, method: str = "sigmoid", temperature: float = 1.0, eps: float = 1e-6) -> np.ndarray:
+    x = np.asarray(scores, dtype=np.float32).reshape(-1)
+    if method == "minmax":
+        mn, mx = np.nanmin(x), np.nanmax(x)
+        denom = mx - mn
+        return (x - mn) / (denom + eps) if (np.isfinite(denom) and denom >= eps) else np.zeros_like(x)
+    if method == "sigmoid":
+        mu, sd = np.nanmean(x), np.nanstd(x)
+        sd = sd if (np.isfinite(sd) and sd > 0) else 1.0
+        z = (x - mu) / (sd * max(temperature, eps))
+        return 1.0 / (1.0 + np.exp(-z))
+    if method == "softmax":
+        t = max(temperature, eps)
+        y = x / t - np.nanmax(x / t)
+        e = np.exp(y)
+        den = np.nansum(e)
+        return e / (den + eps) if (np.isfinite(den) and den >= eps) else np.full_like(x, 1.0 / max(x.size, 1))
+    return x
+
+
 def load_scaler_stats(path: Path):
     arr = np.load(path)
     mean = arr.get("mean")
@@ -67,6 +114,17 @@ def parse_args():
     ap.add_argument("--gpu_id", type=int, default=0)
     ap.add_argument("--batch_size", type=int, default=64)
     ap.add_argument("--verbose", action="store_true")
+
+    ap.add_argument("--calibrate", action="store_true",
+                    help="Apply robust z-score calibration + re-normalization to LSTM output probabilities.")
+    ap.add_argument("--rw_window", type=int, default=12,
+                    help="Rolling window size for robust z-score calibration (used with --calibrate).")
+    ap.add_argument(
+        "--score_norm_method", type=str, default="sigmoid",
+        choices=["none", "minmax", "sigmoid", "softmax"],
+        help="Re-normalization method applied after calibration (used with --calibrate).",
+    )
+    ap.add_argument("--score_norm_temperature", type=float, default=1.0)
     return ap.parse_args()
 
 
@@ -141,12 +199,12 @@ def main():
         enc_hidden=arch["enc_hidden"],
         lstm_hidden=arch["lstm_hidden"],
         lstm_layers=arch["lstm_layers"],
+        bidirectional=arch.get("bidirectional", False),
     ).to(device)
     model.load_state_dict(sd, strict=True)
     model.eval()
 
     grp = df.groupby(group_cols, sort=False)
-    keys = list(grp.groups.keys())
 
     rows = []
     with torch.inference_mode():
@@ -161,6 +219,13 @@ def main():
             inp = torch.tensor(X, dtype=torch.float32, device=device)
             t_logits = model.forward_time_logits(inp).detach().cpu().numpy()  # (B,T)
             probs = 1.0 / (1.0 + np.exp(-t_logits))
+            if args.calibrate:
+                calibrated = np.zeros_like(probs)
+                for bi in range(probs.shape[0]):
+                    zs = _robust_zscore(probs[bi], window=int(args.rw_window), positive_only=True)
+                    calibrated[bi] = _normalize_scores(zs, method=args.score_norm_method,
+                                                       temperature=float(args.score_norm_temperature))
+                probs = calibrated
             for bi, key in enumerate(batch_keys):
                 row = {}
                 if len(group_cols) == 1:
@@ -176,8 +241,9 @@ def main():
                 rows.append(row)
             batch_keys.clear(); batch_meta.clear(); batch_X.clear()
 
-        for key in tqdm(keys, desc="infer instances", dynamic_ncols=True):
-            sdf = grp.get_group(key)
+        for key, sdf in tqdm(grp, desc="infer instances", dynamic_ncols=True):
+            if isinstance(key, tuple) and len(group_cols) == 1:
+                key = key[0]
             meta = {c: sdf.iloc[0][c] for c in meta_cols} if meta_cols else {}
             mdf = sdf.set_index("month").reindex(MONTHS)
             X = mdf[feat_cols].to_numpy(dtype=np.float64)

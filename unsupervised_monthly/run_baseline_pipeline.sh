@@ -20,11 +20,12 @@ set -euo pipefail
 #   BASELINE_NORM_METHOD (default sigmoid)
 #   BASELINE_NORM_TEMPERATURE (default 1.0)
 #   BASELINE_EXPORT_PROB (default 1)
-#   TOP_K (default 24)
+#   BASELINE_RW_WINDOW (default 12; rolling window for per-site robust z-score calibration)
+#   TOP_K (default 12)
 #   MAX_MARGIN (default 6)
 #   DIRECTIONAL_MARGINS (default 1)
 #   STRATIFIED_YEAR (default 1; set 0 to pass --no-stratified_year)
-#   YEAR_START/YEAR_END (optional; e.g., 2017 and 2020)
+#   YEAR_START/YEAR_END (default 2017/2020)
 
 REPO_ROOT="$(cd "$(dirname "$0")"/.. && pwd)"
 cd "$REPO_ROOT"
@@ -36,12 +37,13 @@ SPLIT="${SPLIT:-all}"
 BASELINE_NORM_METHOD="${BASELINE_NORM_METHOD:-sigmoid}"
 BASELINE_NORM_TEMPERATURE="${BASELINE_NORM_TEMPERATURE:-1.0}"
 BASELINE_EXPORT_PROB="${BASELINE_EXPORT_PROB:-1}"
-TOP_K="${TOP_K:-24}"
+BASELINE_RW_WINDOW="${BASELINE_RW_WINDOW:-12}"
+TOP_K="${TOP_K:-12}"
 MAX_MARGIN="${MAX_MARGIN:-6}"
 DIRECTIONAL_MARGINS="${DIRECTIONAL_MARGINS:-1}"
 STRATIFIED_YEAR="${STRATIFIED_YEAR:-1}"
-YEAR_START="${YEAR_START:-}"
-YEAR_END="${YEAR_END:-}"
+YEAR_START="${YEAR_START:-2017}"
+YEAR_END="${YEAR_END:-2020}"
 
 # Embedding map: labels to ids
 declare -A EMBED_MAP=(
@@ -55,7 +57,7 @@ declare -A EMBED_MAP=(
   [SATCLIP]="satclip"
 )
 
-DEFAULT_LABELS=(CLIP GEORSCLIP HANDCRAFTED PRITHIVI SATLASPRETRAIN SATMAE DINOV3 SATCLIP)
+DEFAULT_LABELS=(CLIP GEORSCLIP HANDCRAFTED PRITHIVI SATLASPRETRAIN SATMAE DINOV3)
 
 unified_csv_for() {
   local embed_id="$1"
@@ -79,19 +81,16 @@ start_baseline() {
     local embed_id="${EMBED_MAP[$label]}"; [[ -z "$embed_id" ]] && { echo "[warn] Unknown label $label"; continue; }
     local unified_csv; unified_csv="$(unified_csv_for "$embed_id")"
     local out_dir="unsupervised_monthly/model_runs/${embed_id}"
-    local gt_opt=""; [[ -n "$GROUNDTRUTH_CSV" ]] && gt_opt="--groundtruth_csv $GROUNDTRUTH_CSV"
-    local norm_opts=""; [[ -n "$BASELINE_NORM_METHOD" ]] && norm_opts="--baseline_norm_method $BASELINE_NORM_METHOD --baseline_norm_temperature $BASELINE_NORM_TEMPERATURE"
-    local prob_opt=""; [[ "$BASELINE_EXPORT_PROB" == "1" ]] && prob_opt="--baseline_export_probabilities"
-    local cmd="source change_detect/bin/activate && python -u -m unsupervised_monthly.run_monthly_batch \
-      --embedding ${embed_id} \
-      --features_dir ${FEATURES_DIR_YEARLY} \
-      --features_unified_csv ${unified_csv} \
-      --split ${SPLIT} \
+    local scaler_path="${out_dir}/scaler_stats.npz"
+    local out_csv="${out_dir}/unsup_month_scores_${SPLIT}_distance_baseline_new.csv"
+    local cmd="source change_detect/bin/activate && python -u -m unsupervised_monthly.infer_all_months_distance_baseline \
+      --features_csv ${unified_csv} \
+      --scaler_path ${scaler_path} \
+      --output_csv ${out_csv} \
       --distance l2 \
-      --output_dir ${out_dir} \
-      ${gt_opt} \
-      --rolling_window 6 \
-      ${norm_opts} ${prob_opt}"
+      --rw_window ${BASELINE_RW_WINDOW} \
+      --score_norm_method ${BASELINE_NORM_METHOD} \
+      --score_norm_temperature ${BASELINE_NORM_TEMPERATURE}"
     ensure_session "${embed_id}_distance_baseline" "$cmd"
   done
 }
@@ -131,7 +130,7 @@ evaluate_baseline() {
 }
 
 aggregate_recalls() {
-  python -u unsupervised_monthly/aggregate_recalls.py
+  python -u -m unsupervised_monthly.aggregate_recalls
 }
 
 case "${1:-}" in
@@ -144,7 +143,8 @@ case "${1:-}" in
   aggregate)
     aggregate_recalls;;
   all)
-    shift; merge_baseline "$@"; evaluate_baseline "$@"; aggregate_recalls;;
+    # merge step no longer needed: infer_all_months_distance_baseline writes the unified CSV directly
+    shift; evaluate_baseline "$@"; aggregate_recalls;;
   *)
     cat <<EOF
 Usage: bash unsupervised_monthly/run_baseline_pipeline.sh <start|merge|evaluate|aggregate|all> [EMBEDDINGS...]

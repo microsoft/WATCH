@@ -48,22 +48,25 @@ class LSTMChangeDetector(nn.Module):
         enc_hidden: int = 128,
         lstm_hidden: int = 128,
         lstm_layers: int = 2,
+        bidirectional: bool = False,
     ):
         super().__init__()
+        self.bidirectional = bidirectional
+        out_dim = lstm_hidden * 2 if bidirectional else lstm_hidden
         self.encoder = TemporalEncoder(input_dim=input_dim, hidden_dim=enc_hidden, proj_dim=enc_hidden)
         self.lstm = nn.LSTM(
             input_size=enc_hidden,
             hidden_size=lstm_hidden,
             num_layers=lstm_layers,
-            bidirectional=False,
+            bidirectional=bidirectional,
             batch_first=True,
             dropout=0.1 if lstm_layers > 1 else 0.0,
         )
-        self.pre_head_norm = nn.LayerNorm(lstm_hidden)
+        self.pre_head_norm = nn.LayerNorm(out_dim)
         self.time_head = nn.Sequential(
-            nn.Linear(lstm_hidden, lstm_hidden // 2),
+            nn.Linear(out_dim, out_dim // 2),
             nn.ReLU(inplace=True),
-            nn.Linear(lstm_hidden // 2, 1),
+            nn.Linear(out_dim // 2, 1),
         )
 
         for m in self.time_head.modules():
@@ -93,11 +96,13 @@ def infer_arch_from_state_dict(sd: dict) -> dict:
         raise ValueError("Cannot infer architecture: missing lstm.weight_ih_l0")
     lstm_hidden = lstm_w0.shape[0] // 4
 
-    lstm_layers = len([k for k in sd.keys() if k.startswith("lstm.weight_ih_l")])
+    bidirectional = "lstm.weight_ih_l0_reverse" in sd
+    lstm_layers = len([k for k in sd.keys() if k.startswith("lstm.weight_ih_l") and not k.endswith("_reverse")])
 
     return {
         "input_dim": int(input_dim),
         "enc_hidden": int(enc_hidden),
         "lstm_hidden": int(lstm_hidden),
         "lstm_layers": int(lstm_layers),
+        "bidirectional": bool(bidirectional),
     }

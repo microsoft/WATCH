@@ -188,12 +188,32 @@ def train(args):
 
     input_dim = train_ds.F
 
-    mae = MaskedAutoencoder(input_dim, d_model=args.d_model, depth=args.depth, nhead=args.nhead, ff=args.ff, dropout=args.dropout, mask_ratio=args.mask_ratio).to(device)
-    fore = NextMonthForecaster(input_dim, d_model=args.d_model, depth=max(1, args.depth-1), nhead=args.nhead, ff=args.ff, dropout=args.dropout).to(device)
-    trunk = TemporalTransformer(input_dim, d_model=args.d_model, nhead=args.nhead, num_layers=args.depth, dim_feedforward=args.ff, dropout=args.dropout).to(device)
+    causal = getattr(args, "causal_mae", False)
+    block_masking = getattr(args, "block_masking", False)
+    mae = MaskedAutoencoder(input_dim, d_model=args.d_model, depth=args.depth, nhead=args.nhead, ff=args.ff, dropout=args.dropout, mask_ratio=args.mask_ratio, causal=causal).to(device)
+    fore = NextMonthForecaster(input_dim, d_model=args.d_model, depth=max(1, args.depth-1), nhead=args.nhead, ff=args.ff, dropout=args.dropout, causal=causal).to(device)
+    trunk = TemporalTransformer(input_dim, d_model=args.d_model, nhead=args.nhead, num_layers=args.depth, dim_feedforward=args.ff, dropout=args.dropout, causal=causal).to(device)
     proj_head = torch.nn.Sequential(torch.nn.Linear(args.d_model, args.proj_dim), torch.nn.ReLU(), torch.nn.Linear(args.proj_dim, args.proj_dim)).to(device)
 
-    opt = optim.AdamW(list(mae.parameters()) + list(fore.parameters()) + list(trunk.parameters()) + list(proj_head.parameters()), lr=args.lr, weight_decay=args.wd)
+    # P4: pseudo-label regression head + distance baseline targets
+    pseudo_labels_csv = getattr(args, "pseudo_labels_csv", None)
+    w_pseudo = float(getattr(args, "w_pseudo", 0.0))
+    pseudo_dict: dict = {}
+    pseudo_head = None
+    if pseudo_labels_csv and w_pseudo > 0:
+        import pandas as _pd
+        _pl = _pd.read_csv(pseudo_labels_csv)
+        for _, _row in _pl.iterrows():
+            _sname = str(_row["site_name"])
+            _scores = _row[MONTHS].to_numpy(dtype=np.float32)
+            pseudo_dict[_sname] = torch.tensor(_scores, dtype=torch.float32)
+        pseudo_head = torch.nn.Linear(args.d_model, 1).to(device)
+        print(f"[pseudo] loaded {len(pseudo_dict)} site pseudo-labels from {pseudo_labels_csv}")
+
+    all_params = list(mae.parameters()) + list(fore.parameters()) + list(trunk.parameters()) + list(proj_head.parameters())
+    if pseudo_head is not None:
+        all_params += list(pseudo_head.parameters())
+    opt = optim.AdamW(all_params, lr=args.lr, weight_decay=args.wd)
     scheduler = None
     if args.scheduler == "cosine":
         scheduler = optim.lr_scheduler.CosineAnnealingLR(opt, T_max=args.epochs, eta_min=args.eta_min)
@@ -240,12 +260,14 @@ def train(args):
     best_metric = float("inf"); patience = args.patience
     use_val = (val_loader is not None)
     for epoch in range(args.epochs):
-        mae.train(); fore.train(); trunk.train(); proj_head.train();
+        mae.train(); fore.train(); trunk.train(); proj_head.train()
+        if pseudo_head is not None:
+            pseudo_head.train()
         running = 0.0
         finite_batches = 0
-        for x, _, _ in tqdm(train_loader, desc=f"Epoch {epoch}"):
+        for x, site_names, _ in tqdm(train_loader, desc=f"Epoch {epoch}"):
             x = x.to(device)
-            l_mae, recon, mask = mae(x)
+            l_mae, recon, mask = mae(x, block_masking=block_masking)
             l_fore, pred = fore(x)
             z = trunk(x)
             zp = z.mean(dim=1)
@@ -262,6 +284,13 @@ def train(args):
                 return v if finite else torch.tensor(0.0, device=device, requires_grad=True)
             l_mae = safe(l_mae); l_fore = safe(l_fore); l_tol = safe(l_tol); l_bt = safe(l_bt)
             loss = args.w_mae * l_mae + args.w_fore * l_fore + args.w_tol * l_tol + args.w_bt * l_bt
+            if pseudo_head is not None and w_pseudo > 0:
+                pseudo_targets = torch.stack([
+                    pseudo_dict.get(s, torch.zeros(TIME_LEN)) for s in site_names
+                ]).to(device)  # (B, T)
+                pseudo_pred = torch.sigmoid(pseudo_head(z).squeeze(-1))  # (B, T)
+                l_pseudo = safe(torch.nn.functional.mse_loss(pseudo_pred, pseudo_targets))
+                loss = loss + w_pseudo * l_pseudo
             if not torch.isfinite(loss):
                 continue
             opt.zero_grad(set_to_none=True)
@@ -282,7 +311,7 @@ def train(args):
         if np.isfinite(metric) and (metric + 1e-6 < best_metric):
             best_metric = metric; patience = args.patience
             os.makedirs(out_dir, exist_ok=True)
-            torch.save({
+            ckpt_save = {
                 "mae": mae.state_dict(),
                 "fore": fore.state_dict(),
                 "trunk": trunk.state_dict(),
@@ -294,7 +323,12 @@ def train(args):
                 "ff": args.ff,
                 "dropout": args.dropout,
                 "mask_ratio": args.mask_ratio,
-            }, os.path.join(out_dir, "unsup_models.pt"))
+                "causal": causal,
+                "block_masking": block_masking,
+            }
+            if pseudo_head is not None:
+                ckpt_save["pseudo_head"] = pseudo_head.state_dict()
+            torch.save(ckpt_save, os.path.join(out_dir, "unsup_models.pt"))
             print(f"✓ saved (best on train) -> {os.path.join(out_dir, 'unsup_models.pt')}")
         else:
             if np.isfinite(metric):
@@ -414,6 +448,14 @@ if __name__ == "__main__":
     ap.add_argument("--eta_min", type=float, default=1e-5)
 
     ap.add_argument("--mask_ratio", type=float, default=0.3)
+    ap.add_argument("--causal_mae", action="store_true",
+                    help="Train MAE/forecaster/trunk with causal (past-only) attention mask.")
+    ap.add_argument("--block_masking", action="store_true",
+                    help="P5: Mask a contiguous block of months per sequence instead of random scatter.")
+    ap.add_argument("--pseudo_labels_csv", type=str, default=None,
+                    help="P4: CSV of per-site distance baseline scores to use as regression pseudo-labels.")
+    ap.add_argument("--w_pseudo", type=float, default=0.3,
+                    help="P4: Weight for pseudo-label regression loss (default: 0.3).")
     ap.add_argument("--bt_lambda", type=float, default=5e-3)
     ap.add_argument("--temp_tau", type=float, default=0.2)
     ap.add_argument("--w_mae", type=float, default=1.0)
