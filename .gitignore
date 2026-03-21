@@ -89,6 +89,10 @@ test.ipynb
 /*
 
 # Allowlist core directories requested
+!/self_supervised_change_detection/
+!/weakly_supervised/
+!/temporal_embedding_distance/
+# Legacy names (kept in case old paths exist)
 !/unsupervised_monthly/
 !/weakly_supervised_monthly/
 
@@ -106,22 +110,40 @@ test.ipynb
 !/figures/
 !/download_hf_models.py
 !/export_merged_monthly_inference_tables.py
+!/generate_paper_results.py
 !/extract_embeddings_unified_modified.py
 !/extract_embeddings.sh
 !/feature_extraction.py
+!/satlaspretrain_finalize.sh
+!/watch_and_finalize.sh
 
 # Allow scripts in unsupervised already via dir allow; still ignore heavy outputs within
 unsupervised/model_runs/
 unsupervised/old_results/
 
-# Ignore heavy outputs in unsupervised_monthly as well
+# Ignore heavy outputs in self_supervised_change_detection
+self_supervised_change_detection/model_runs/
+self_supervised_change_detection/old_results/
+self_supervised_change_detection/old_resources/
+self_supervised_change_detection/results/
+self_supervised_change_detection/global_results/
+
+# Ignore heavy outputs in temporal_embedding_distance
+temporal_embedding_distance/model_runs/
+temporal_embedding_distance/results/
+temporal_embedding_distance/global_results/
+
+# Also ignore heavy outputs for weakly_supervised
+weakly_supervised/model_runs/
+weakly_supervised/results/
+weakly_supervised/global_results/
+
+# Legacy names for backward compat
 unsupervised_monthly/model_runs/
 unsupervised_monthly/old_results/
 unsupervised_monthly/old_resources/
 unsupervised_monthly/results/
 unsupervised_monthly/global_results/
-
-# Also ignore heavy outputs for weakly_supervised_monthly (if present)
 weakly_supervised_monthly/model_runs/
 weakly_supervised_monthly/results/
 weakly_supervised_monthly/global_results/

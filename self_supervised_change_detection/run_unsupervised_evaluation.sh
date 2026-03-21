@@ -57,7 +57,7 @@ fi
 
 echo "[info] Evaluating embeddings: ${MODELS[*]}"
 
-PY_EVAL_MODULE="unsupervised_monthly.evaluate_unified_monthlies"
+PY_EVAL_MODULE="self_supervised_change_detection.evaluate_unified_monthlies"
 
 for EMB in "${MODELS[@]}"; do
   EMB_DIR="${MODEL_RUNS_DIR}/${EMB}"
@@ -113,7 +113,7 @@ for EMB in "${MODELS[@]}"; do
   # under unsupervised_monthly/results/<embedding>/.
   python -u "${ROOT_DIR}/export_merged_monthly_inference_tables.py" \
     --repo_root "${ROOT_DIR}" \
-    --pipelines unsupervised_monthly \
+    --pipelines self_supervised_change_detection \
     --only_embedding "${EMB}" \
     --year_start 2017 --year_end 2024
 done

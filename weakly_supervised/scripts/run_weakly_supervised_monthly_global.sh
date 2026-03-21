@@ -3,20 +3,20 @@
 # Licensed under the MIT License.
 set -euo pipefail
 
-# Run distance-baseline global inference for each embedding using:
+# Run weakly-supervised global inference for each embedding using:
 # - global features CSVs: planet_mosaics_final_4bands/features_unified_global_without_mask
-# - trained scaler stats (Afghanistan-trained): unsupervised_monthly/model_runs/<embedding>/scaler_stats.npz
-# - output: unsupervised_monthly/global_results/<embedding>/inference_all_months_distance_baseline.csv
+# - trained model/scaler: weakly_supervised/model_runs/<embedding>/{model.pt,scaler_stats.npz}
+# - output: weakly_supervised/global_results/<embedding>/inference_all_months_weakly_supervised.csv
 
 FEATURES_DIR=${FEATURES_DIR:-planet_mosaics_final_4bands/features_unified_global_without_mask}
-MODEL_RUNS_DIR=${MODEL_RUNS_DIR:-unsupervised_monthly/model_runs}
-OUT_BASE=${OUT_BASE:-unsupervised_monthly/global_results}
+MODEL_RUNS_DIR=${MODEL_RUNS_DIR:-weakly_supervised/model_runs}
+OUT_BASE=${OUT_BASE:-weakly_supervised/global_results}
 PY=${PY:-./change_detect/bin/python}
+DEVICE=${DEVICE:-cuda}
+GPU_ID=${GPU_ID:-0}
+BATCH_SIZE=${BATCH_SIZE:-64}
 
 MODELS=${1:-all}
-DISTANCE=${DISTANCE:-l2}
-BASELINE_NORM_METHOD=${BASELINE_NORM_METHOD:-sigmoid}
-BASELINE_NORM_TEMPERATURE=${BASELINE_NORM_TEMPERATURE:-1.0}
 
 if [[ ! -d "$FEATURES_DIR" ]]; then
   echo "[err] FEATURES_DIR not found: $FEATURES_DIR" >&2
@@ -48,26 +48,28 @@ for emb in "${embeddings[@]}"; do
   fi
 
   model_dir="$MODEL_RUNS_DIR/$emb"
+  model_pt="$model_dir/model.pt"
   scaler_npz="$model_dir/scaler_stats.npz"
-  if [[ ! -f "$scaler_npz" ]]; then
-    echo "[warn] missing scaler for $emb under $model_dir; skipping" >&2
+  if [[ ! -f "$model_pt" || ! -f "$scaler_npz" ]]; then
+    echo "[warn] missing model/scaler for $emb under $model_dir; skipping" >&2
     continue
   fi
 
   out_dir="$OUT_BASE/$emb"
   mkdir -p "$out_dir"
-  out_csv="$out_dir/inference_all_months_distance_baseline.csv"
+  out_csv="$out_dir/inference_all_months_weakly_supervised.csv"
 
-  echo "[run] distance-baseline global: $emb"
-  "$PY" -m unsupervised_monthly.infer_all_months_distance_baseline \
+  echo "[run] weakly-supervised global: $emb"
+  "$PY" -m weakly_supervised.infer \
     --features_csv "$feats" \
+    --model_path "$model_pt" \
     --scaler_path "$scaler_npz" \
     --output_csv "$out_csv" \
     --group_cols "site_name,grid_id" \
     --meta_cols "lon,lat" \
-    --distance "$DISTANCE" \
-    --score_norm_method "$BASELINE_NORM_METHOD" \
-    --score_norm_temperature "$BASELINE_NORM_TEMPERATURE"
+    --device "$DEVICE" \
+    --gpu_id "$GPU_ID" \
+    --batch_size "$BATCH_SIZE"
 
 done
 

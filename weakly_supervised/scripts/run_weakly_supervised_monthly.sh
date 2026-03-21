@@ -12,7 +12,7 @@ set -euo pipefail
 # - Runs inference for the full window 2017_01..2024_12
 # - Evaluates with the existing monthly evaluator (margins 0..6, plus
 #   directional positive/negative) for splits: test and all
-# - Writes outputs under weakly_supervised_monthly/
+# - Writes outputs under weakly_supervised/
 ###############################################################################
 
 REPO_ROOT="$(cd "$(dirname "$0")"/../.. && pwd)"
@@ -36,8 +36,8 @@ EARLY_STOP_PATIENCE="${EARLY_STOP_PATIENCE:-15}"
 NUM_WORKERS="${NUM_WORKERS:-0}"
 
 # Output locations (requested)
-MODEL_RUNS_DIR="${MODEL_RUNS_DIR:-weakly_supervised_monthly/model_runs}"
-RESULTS_DIR="${RESULTS_DIR:-weakly_supervised_monthly/results}"
+MODEL_RUNS_DIR="${MODEL_RUNS_DIR:-weakly_supervised/model_runs}"
+RESULTS_DIR="${RESULTS_DIR:-weakly_supervised/results}"
 mkdir -p "$MODEL_RUNS_DIR" "$RESULTS_DIR"
 
 # Evaluation knobs
@@ -130,7 +130,7 @@ echo "[info] num_workers=${NUM_WORKERS}"
 
 source change_detect/bin/activate
 
-python -u -m weakly_supervised_monthly.train \
+python -u -m weakly_supervised.train \
   --features_csv "${features_csv}" \
   --groundtruth_csv "${GROUNDTRUTH_CSV}" \
   --split_col "${SPLIT_COL}" \
@@ -152,7 +152,7 @@ if [[ \$rc -ne 0 ]]; then
   exit \$rc
 fi
 
-python -u -m weakly_supervised_monthly.infer \
+python -u -m weakly_supervised.infer \
   --features_csv "${features_csv}" \
   --model_path "${out_dir}/model.pt" \
   --scaler_path "${out_dir}/scaler_stats.npz" \
@@ -167,7 +167,7 @@ if [[ \$rc -ne 0 ]]; then
 fi
 
 for SPL in test all; do
-  python -u -m unsupervised_monthly.evaluate_unified_monthlies \
+  python -u -m self_supervised_change_detection.evaluate_unified_monthlies \
     --scores_csv "${out_dir}/unsup_month_scores_all_weakly_supervised.csv" \
     --split "\${SPL}" \
     --groundtruth_csv "${GROUNDTRUTH_CSV}" \
@@ -189,7 +189,7 @@ done
 
 python -u "${REPO_ROOT}/export_merged_monthly_inference_tables.py" \
   --repo_root "${REPO_ROOT}" \
-  --pipelines weakly_supervised_monthly \
+  --pipelines weakly_supervised \
   --only_embedding "${embed_id}" \
   --year_start 2017 --year_end 2024
 rc=\$?
@@ -216,7 +216,8 @@ EOF
 
 aggregate_results() {
   source change_detect/bin/activate
-  python -u unsupervised_monthly/aggregate_recalls.py --results_dir "$RESULTS_DIR" --modes weakly_supervised
+  python -u -m self_supervised_change_detection.aggregate_recalls \
+    --results_dir "$RESULTS_DIR" --modes weakly_supervised
 }
 
 case "${1:-}" in
@@ -231,19 +232,19 @@ case "${1:-}" in
   *)
     cat <<EOF
 Usage:
-  bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh start [EMBEDDINGS...]
-  bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh aggregate
+  bash weakly_supervised/scripts/run_weakly_supervised_monthly.sh start [EMBEDDINGS...]
+  bash weakly_supervised/scripts/run_weakly_supervised_monthly.sh aggregate
 
 Examples:
-  bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh start
-  bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh start DINOV3 SATMAE
+  bash weakly_supervised/scripts/run_weakly_supervised_monthly.sh start
+  bash weakly_supervised/scripts/run_weakly_supervised_monthly.sh start DINOV3 SATMAE
 
 Embeddings (labels): ${DEFAULT_LABELS[*]}
 
 Outputs:
-  weakly_supervised_monthly/model_runs/<embedding>/model.pt, scaler_stats.npz, unsup_month_scores_all_weakly_supervised.csv
-  weakly_supervised_monthly/results/<embedding>/<embedding>_weakly_supervised_{test|all}_metrics{,_positive,_negative}.csv
-  weakly_supervised_monthly/results/recall_{test|all}_weakly_supervised{,_positive,_negative}.csv
+  weakly_supervised/model_runs/<embedding>/model.pt, scaler_stats.npz, unsup_month_scores_all_weakly_supervised.csv
+  weakly_supervised/results/<embedding>/<embedding>_weakly_supervised_{test|all}_metrics{,_positive,_negative}.csv
+  weakly_supervised/results/recall_{test|all}_weakly_supervised{,_positive,_negative}.csv
 EOF
     exit 1
     ;;

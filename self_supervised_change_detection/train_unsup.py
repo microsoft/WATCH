@@ -3,16 +3,16 @@
 # Licensed under the MIT License.
 """
 Convenience wrapper to run the training/export pipeline using the LOCAL
-`unsupervised_monthly/main_train_unsupervised.py` entry (vendorized trainer).
+`self_supervised_change_detection/main_train_unsupervised.py` entry (vendorized trainer).
 Use this to produce `unsup_models.pt` and `scaler_stats.npz` for a given features CSV.
 All CLI arguments are forwarded transparently to the local script.
 
 Example:
-  python -m unsupervised_monthly.train_unsup \
+  python -m self_supervised_change_detection.train_unsup \
     --features_csv ../planet_mosaics_final_4bands/features_dinov3_monthly_masked.csv \
     --groundtruth_csv ../planet_mosaics_final_4bands/ground_truth_split_balanced_aux.csv \
-    --output_dir unsupervised_monthly/model_runs/dinov3 \
-    --scaler_path unsupervised_monthly/model_runs/dinov3/scaler_stats.npz \
+    --output_dir self_supervised_change_detection/model_runs/dinov3 \
+    --scaler_path self_supervised_change_detection/model_runs/dinov3/scaler_stats.npz \
     --epochs 60 --batch_size 16 --export_only
 """
 from __future__ import annotations
@@ -23,7 +23,7 @@ import subprocess
 
 def main():
   here = Path(__file__).resolve().parent
-  cmd = [sys.executable, '-m', 'unsupervised_monthly.main_train_unsupervised'] + sys.argv[1:]
+  cmd = [sys.executable, '-m', 'self_supervised_change_detection.main_train_unsupervised'] + sys.argv[1:]
   print('Forwarding to local trainer (module):', ' '.join(cmd))
   env = os.environ.copy()
   # Ensure this package is importable when running as a module

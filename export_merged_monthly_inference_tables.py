@@ -7,8 +7,9 @@ Creates, for each embedding, a CSV with columns:
   site_name, known_month_of_change, 2017_01, ..., 2024_12
 
 It covers:
-- unsupervised_monthly (baseline + unsupervised modes)
-- weakly_supervised_monthly (weakly_supervised mode)
+- temporal_embedding_distance (TED mode)
+- self_supervised_change_detection (SSCD mode)
+- weakly_supervised (weakly_supervised mode)
 
 The source "scores" CSVs already contain per-month probabilities, but are stored
 under the model_runs folders. This script materializes a single merged artifact
@@ -95,11 +96,16 @@ def select_existing(*paths: str) -> Optional[str]:
     return None
 
 
-def infer_unsupervised_monthly_jobs(
+def infer_ted_jobs(
     repo_root: str, year_start: int, year_end: int
 ) -> List[ExportJob]:
-    model_runs_dir = os.path.join(repo_root, "unsupervised_monthly", "model_runs")
-    results_dir = os.path.join(repo_root, "unsupervised_monthly", "results")
+    """Temporal Embedding Distance (TED) jobs."""
+    model_runs_dir = os.path.join(repo_root, "temporal_embedding_distance", "model_runs")
+    results_dir = os.path.join(repo_root, "temporal_embedding_distance", "results")
+    # Fallback to old directory name for backward compat
+    if not os.path.isdir(model_runs_dir):
+        model_runs_dir = os.path.join(repo_root, "self_supervised_change_detection", "model_runs")
+        results_dir = os.path.join(repo_root, "self_supervised_change_detection", "results")
     if not os.path.isdir(model_runs_dir):
         return []
 
@@ -109,8 +115,9 @@ def infer_unsupervised_monthly_jobs(
         if not os.path.isdir(emb_dir):
             continue
 
-        # Distance baseline (canonical) with legacy fallbacks
+        # TED canonical with legacy fallbacks
         baseline_src = select_existing(
+            os.path.join(emb_dir, "unsup_month_scores_all_temporal_embedding_distance.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_distance_baseline_new.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_distance_baseline.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_baseline_new.csv"),
@@ -120,16 +127,36 @@ def infer_unsupervised_monthly_jobs(
             jobs.append(
                 ExportJob(
                     embedding=embedding,
-                    mode="distance_baseline",
+                    mode="temporal_embedding_distance",
                     scores_csv=baseline_src,
                     out_csv=os.path.join(
-                        results_dir, embedding, "inference_all_months_distance_baseline.csv"
+                        results_dir, embedding, "inference_all_months_temporal_embedding_distance.csv"
                     ),
                 )
             )
 
-        # Learned unsupervised (canonical) with legacy fallbacks
+    return jobs
+
+
+def infer_sscd_jobs(
+    repo_root: str, year_start: int, year_end: int
+) -> List[ExportJob]:
+    """Self-Supervised Change Detection (SSCD) jobs."""
+    model_runs_dir = os.path.join(repo_root, "self_supervised_change_detection", "model_runs")
+    results_dir = os.path.join(repo_root, "self_supervised_change_detection", "results")
+    if not os.path.isdir(model_runs_dir):
+        return []
+
+    jobs: List[ExportJob] = []
+    for embedding in sorted(os.listdir(model_runs_dir)):
+        emb_dir = os.path.join(model_runs_dir, embedding)
+        if not os.path.isdir(emb_dir):
+            continue
+
+        # SSCD canonical with legacy fallbacks
         unsup_src = select_existing(
+            os.path.join(emb_dir, "unsup_month_scores_all_self_supervised_change_detection_new.csv"),
+            os.path.join(emb_dir, "unsup_month_scores_all_self_supervised_change_detection.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_learned_unsupervised_new.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_learned_unsupervised.csv"),
             os.path.join(emb_dir, "unsup_month_scores_all_unsupervised_new.csv"),
@@ -139,10 +166,10 @@ def infer_unsupervised_monthly_jobs(
             jobs.append(
                 ExportJob(
                     embedding=embedding,
-                    mode="learned_unsupervised",
+                    mode="self_supervised_change_detection",
                     scores_csv=unsup_src,
                     out_csv=os.path.join(
-                        results_dir, embedding, "inference_all_months_learned_unsupervised.csv"
+                        results_dir, embedding, "inference_all_months_self_supervised_change_detection.csv"
                     ),
                 )
             )
@@ -151,8 +178,8 @@ def infer_unsupervised_monthly_jobs(
 
 
 def infer_weakly_supervised_monthly_jobs(repo_root: str) -> List[ExportJob]:
-    model_runs_dir = os.path.join(repo_root, "weakly_supervised_monthly", "model_runs")
-    results_dir = os.path.join(repo_root, "weakly_supervised_monthly", "results")
+    model_runs_dir = os.path.join(repo_root, "weakly_supervised", "model_runs")
+    results_dir = os.path.join(repo_root, "weakly_supervised", "results")
     if not os.path.isdir(model_runs_dir):
         return []
 
@@ -233,7 +260,15 @@ def main() -> int:
         "--pipelines",
         type=str,
         default="all",
-        choices=["all", "unsupervised_monthly", "weakly_supervised_monthly"],
+        choices=[
+            "all",
+            "temporal_embedding_distance",
+            "self_supervised_change_detection",
+            "weakly_supervised",
+            # legacy aliases
+            "unsupervised_monthly",
+            "weakly_supervised_monthly",
+        ],
         help="Which pipeline(s) to export (default: all).",
     )
     args = ap.parse_args()
@@ -247,9 +282,11 @@ def main() -> int:
     known_month_df = load_known_month_map(gt_path, args.year_start, args.year_end)
 
     jobs: List[ExportJob] = []
-    if args.pipelines in {"all", "unsupervised_monthly"}:
-        jobs.extend(infer_unsupervised_monthly_jobs(repo_root, args.year_start, args.year_end))
-    if args.pipelines in {"all", "weakly_supervised_monthly"}:
+    if args.pipelines in {"all", "temporal_embedding_distance", "unsupervised_monthly"}:
+        jobs.extend(infer_ted_jobs(repo_root, args.year_start, args.year_end))
+    if args.pipelines in {"all", "self_supervised_change_detection"}:
+        jobs.extend(infer_sscd_jobs(repo_root, args.year_start, args.year_end))
+    if args.pipelines in {"all", "weakly_supervised", "weakly_supervised_monthly"}:
         jobs.extend(infer_weakly_supervised_monthly_jobs(repo_root))
 
     if args.only_embedding:

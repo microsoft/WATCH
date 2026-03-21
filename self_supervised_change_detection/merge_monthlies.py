@@ -4,23 +4,25 @@
 """Merge per-month CSVs into a single aggregated matrix.
 
 Canonical modes:
-- distance_baseline
-- learned_unsupervised
+- temporal_embedding_distance  (TED)
+- self_supervised_change_detection  (SSCD)
 
 Per-month inputs (canonical filenames):
-- distance_baseline: monthly_distance_baseline_<embedding>_<YYYY>_<MM>_<split>.csv
-- learned_unsupervised: monthly_learned_unsupervised_<YYYY>_<MM>_<split>.csv
+- temporal_embedding_distance: monthly_temporal_embedding_distance_<embedding>_<YYYY>_<MM>_<split>.csv
+- self_supervised_change_detection: monthly_self_supervised_change_detection_<YYYY>_<MM>_<split>.csv
 
 Backwards compatibility:
-- Also accepts legacy per-month filenames with monthly_baseline_* and monthly_unsupervised_*
-- Also accepts legacy mode args: baseline -> distance_baseline, unsupervised -> learned_unsupervised
+- Also accepts legacy per-month filenames with monthly_baseline_* and monthly_unsupervised_*,
+  monthly_distance_baseline_* and monthly_learned_unsupervised_*
+- Also accepts legacy mode args: baseline/distance_baseline -> temporal_embedding_distance,
+  unsupervised/learned_unsupervised -> self_supervised_change_detection
 
 Writes `unsup_month_scores_<split>_<mode>.csv` with columns [site_name, mode, YYYY_MM...]
 
 Usage:
-    python -m unsupervised_monthly.merge_monthlies \
-        --out_dir unsupervised_monthly/model_runs/handcrafted \
-        --mode distance_baseline --split all --remove
+    python -m self_supervised_change_detection.merge_monthlies \
+        --out_dir self_supervised_change_detection/model_runs/handcrafted \
+        --mode self_supervised_change_detection --split all --remove
 """
 from __future__ import annotations
 import argparse
@@ -40,8 +42,8 @@ def parse_args():
         "--mode",
         type=str,
         required=True,
-        choices=list(CANONICAL_MODES) + ["baseline", "unsupervised"],
-        help="Which per-month files to merge (canonical: distance_baseline|learned_unsupervised).",
+        choices=list(CANONICAL_MODES) + ["baseline", "unsupervised", "distance_baseline", "learned_unsupervised"],
+        help="Which per-month files to merge (canonical: temporal_embedding_distance|self_supervised_change_detection).",
     )
     ap.add_argument("--split", type=str, default="all", help="Split suffix used in filenames (e.g., all, train, val, test)")
     ap.add_argument("--suffix", type=str, default="", help="Optional suffix to append before .csv in output filename, e.g., _new")
@@ -73,17 +75,21 @@ def merge_monthlies(out_dir: str, mode: str, split: str, remove: bool, suffix: s
         raise ValueError(f"Unknown mode: {mode}. Supported: {list(CANONICAL_MODES)}")
 
     # Patterns
-    if mode == "distance_baseline":
+    if mode == "temporal_embedding_distance":
         # Accept any embedding token between '<mode>' and the date.
         pats = [
+            re.compile(r"^monthly_temporal_embedding_distance_.*_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
+            # Legacy canonical
             re.compile(r"^monthly_distance_baseline_.*_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
-            # Legacy
+            # Legacy shorthand
             re.compile(r"^monthly_baseline_.*_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
         ]
-    else:  # learned_unsupervised
+    else:  # self_supervised_change_detection
         pats = [
+            re.compile(r"^monthly_self_supervised_change_detection_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
+            # Legacy canonical
             re.compile(r"^monthly_learned_unsupervised_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
-            # Legacy
+            # Legacy shorthand
             re.compile(r"^monthly_unsupervised_([0-9]{4})_([0-9]{2})_" + re.escape(split) + r"\.csv$"),
         ]
 

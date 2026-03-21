@@ -142,6 +142,7 @@ class MaskedAutoencoder(nn.Module):
             loss = F.mse_loss(recon, x)
         return loss, recon, mask
 
+
 class NextMonthForecaster(nn.Module):
     """Predicts the next month's features from preceding time steps."""
 

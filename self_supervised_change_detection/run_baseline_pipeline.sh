@@ -3,14 +3,13 @@
 # Licensed under the MIT License.
 set -euo pipefail
 
-# Baseline pipeline: start monthly generation in tmux per embedding, merge to unified CSVs,
+# TED (Temporal Embedding Distance) pipeline: start monthly generation in tmux per embedding,
 # evaluate (test+all), and aggregate recall matrices.
 # Usage:
-#   bash unsupervised_monthly/run_baseline_pipeline.sh start [EMBEDDINGS...]
-#   bash unsupervised_monthly/run_baseline_pipeline.sh merge [EMBEDDINGS...]
-#   bash unsupervised_monthly/run_baseline_pipeline.sh evaluate [EMBEDDINGS...]
-#   bash unsupervised_monthly/run_baseline_pipeline.sh aggregate
-#   bash unsupervised_monthly/run_baseline_pipeline.sh all [EMBEDDINGS...]
+#   bash self_supervised_change_detection/run_baseline_pipeline.sh start [EMBEDDINGS...]
+#   bash self_supervised_change_detection/run_baseline_pipeline.sh evaluate [EMBEDDINGS...]
+#   bash self_supervised_change_detection/run_baseline_pipeline.sh aggregate
+#   bash self_supervised_change_detection/run_baseline_pipeline.sh all [EMBEDDINGS...]
 #
 # Env overrides:
 #   FEATURES_DIR_YEARLY (default planet_mosaics_final_4bands/features_new_with_mask)
@@ -44,6 +43,8 @@ DIRECTIONAL_MARGINS="${DIRECTIONAL_MARGINS:-1}"
 STRATIFIED_YEAR="${STRATIFIED_YEAR:-1}"
 YEAR_START="${YEAR_START:-2017}"
 YEAR_END="${YEAR_END:-2020}"
+MODEL_RUNS_DIR="${MODEL_RUNS_DIR:-temporal_embedding_distance/model_runs}"
+RESULTS_DIR="${RESULTS_DIR:-temporal_embedding_distance/results}"
 
 # Embedding map: labels to ids
 declare -A EMBED_MAP=(
@@ -80,10 +81,11 @@ start_baseline() {
   for label in "${labels[@]}"; do
     local embed_id="${EMBED_MAP[$label]}"; [[ -z "$embed_id" ]] && { echo "[warn] Unknown label $label"; continue; }
     local unified_csv; unified_csv="$(unified_csv_for "$embed_id")"
-    local out_dir="unsupervised_monthly/model_runs/${embed_id}"
-    local scaler_path="${out_dir}/scaler_stats.npz"
-    local out_csv="${out_dir}/unsup_month_scores_${SPLIT}_distance_baseline_new.csv"
-    local cmd="source change_detect/bin/activate && python -u -m unsupervised_monthly.infer_all_months_distance_baseline \
+    local out_dir="${MODEL_RUNS_DIR}/${embed_id}"
+    local scaler_path="self_supervised_change_detection/model_runs/${embed_id}/scaler_stats.npz"
+    local out_csv="${out_dir}/unsup_month_scores_${SPLIT}_temporal_embedding_distance.csv"
+    mkdir -p "$out_dir"
+    local cmd="source change_detect/bin/activate && python -u -m temporal_embedding_distance.infer_all_months \
       --features_csv ${unified_csv} \
       --scaler_path ${scaler_path} \
       --output_csv ${out_csv} \
@@ -91,16 +93,7 @@ start_baseline() {
       --rw_window ${BASELINE_RW_WINDOW} \
       --score_norm_method ${BASELINE_NORM_METHOD} \
       --score_norm_temperature ${BASELINE_NORM_TEMPERATURE}"
-    ensure_session "${embed_id}_distance_baseline" "$cmd"
-  done
-}
-
-merge_baseline() {
-  local labels=("$@"); [[ ${#labels[@]} -eq 0 ]] && labels=("${DEFAULT_LABELS[@]}")
-  for label in "${labels[@]}"; do
-    local embed_id="${EMBED_MAP[$label]}"; [[ -z "$embed_id" ]] && { echo "[warn] Unknown label $label"; continue; }
-    local out_dir="unsupervised_monthly/model_runs/${embed_id}"
-    python -u -m unsupervised_monthly.merge_monthlies --out_dir "$out_dir" --mode distance_baseline --split "$SPLIT" --suffix _new
+    ensure_session "${embed_id}_temporal_embedding_distance" "$cmd"
   done
 }
 
@@ -109,16 +102,20 @@ evaluate_baseline() {
   local splits=(test all)
   for label in "${labels[@]}"; do
     local embed_id="${EMBED_MAP[$label]}"; [[ -z "$embed_id" ]] && { echo "[warn] Unknown label $label"; continue; }
-    local csv="unsupervised_monthly/model_runs/${embed_id}/unsup_month_scores_all_distance_baseline_new.csv"
-    [[ -f "$csv" ]] || { echo "[skip] ${embed_id}: unified baseline CSV missing"; continue; }
+    local csv="${MODEL_RUNS_DIR}/${embed_id}/unsup_month_scores_all_temporal_embedding_distance.csv"
+    # Fallback to old filename for backward compat
+    [[ -f "$csv" ]] || csv="${MODEL_RUNS_DIR}/${embed_id}/unsup_month_scores_all_distance_baseline_new.csv"
+    [[ -f "$csv" ]] || { echo "[skip] ${embed_id}: unified TED CSV missing"; continue; }
+    local res_dir="${RESULTS_DIR}/${embed_id}"
+    mkdir -p "$res_dir"
     for SPL in "${splits[@]}"; do
-      python -u -m unsupervised_monthly.evaluate_unified_monthlies \
+      python -u -m self_supervised_change_detection.evaluate_unified_monthlies \
         --scores_csv "$csv" \
         --split "$SPL" \
         --groundtruth_csv "$GROUNDTRUTH_CSV" \
-        --results_dir "unsupervised_monthly/results/${embed_id}" \
+        --results_dir "$res_dir" \
         --embedding "$embed_id" \
-        --mode distance_baseline \
+        --mode temporal_embedding_distance \
         --top_k "$TOP_K" \
         --max_margin "$MAX_MARGIN" \
         $([[ "$DIRECTIONAL_MARGINS" == 1 ]] && echo "--directional" || true) \
@@ -130,30 +127,33 @@ evaluate_baseline() {
 }
 
 aggregate_recalls() {
-  python -u -m unsupervised_monthly.aggregate_recalls
+  python -u -m self_supervised_change_detection.aggregate_recalls \
+    --model_runs_dir "$MODEL_RUNS_DIR" \
+    --results_dir "$RESULTS_DIR"
 }
 
 case "${1:-}" in
   start)
     shift; start_baseline "$@";;
-  merge)
-    shift; merge_baseline "$@";;
   evaluate)
     shift; evaluate_baseline "$@";;
   aggregate)
     aggregate_recalls;;
   all)
-    # merge step no longer needed: infer_all_months_distance_baseline writes the unified CSV directly
-    shift; evaluate_baseline "$@"; aggregate_recalls;;
+    # infer_all_months writes unified CSV directly, no merge step needed
+    shift
+    local_labels=("$@")
+    start_baseline "${local_labels[@]}"
+    evaluate_baseline "${local_labels[@]}"
+    aggregate_recalls;;
   *)
     cat <<EOF
-Usage: bash unsupervised_monthly/run_baseline_pipeline.sh <start|merge|evaluate|aggregate|all> [EMBEDDINGS...]
+Usage: bash self_supervised_change_detection/run_baseline_pipeline.sh <start|evaluate|aggregate|all> [EMBEDDINGS...]
 Examples:
-  bash unsupervised_monthly/run_baseline_pipeline.sh start PRITHIVI DINOV3
-  bash unsupervised_monthly/run_baseline_pipeline.sh merge PRITHIVI DINOV3
+  bash self_supervised_change_detection/run_baseline_pipeline.sh start PRITHIVI DINOV3
   TOP_K=12 STRATIFIED_YEAR=0 YEAR_START=2017 YEAR_END=2020 \
-    bash unsupervised_monthly/run_baseline_pipeline.sh evaluate PRITHIVI DINOV3
-  bash unsupervised_monthly/run_baseline_pipeline.sh aggregate
+    bash self_supervised_change_detection/run_baseline_pipeline.sh evaluate PRITHIVI DINOV3
+  bash self_supervised_change_detection/run_baseline_pipeline.sh aggregate
 EOF
     exit 1;;
 esac

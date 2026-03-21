@@ -18,10 +18,10 @@ Outputs:
 
 Usage examples:
   Single month:
-    python -m unsupervised_monthly.monthly_inference \
+    python -m self_supervised_change_detection.monthly_inference \
       --embedding dinov3 --year 2019 --month 02 \
       --split test --groundtruth_csv path/to/gt.csv \
-      --output_dir ./unsupervised_monthly_outputs
+      --output_dir ./self_supervised_change_detection_outputs
 
   Batch (see run_monthly_batch.py) processes Jan 2017..Dec 2024.
 """
@@ -447,13 +447,13 @@ def parse_args():
     ap.add_argument('--groundtruth_csv', type=str, default=None)
     ap.add_argument('--split', type=str, default='all', choices=['train','val','test','all','all_looted'])
     ap.add_argument('--distance', type=str, default='l2', choices=['l2','cosine'])
-    ap.add_argument('--scaler_path', type=str, default=None, help='Scaler stats .npz for normalization (defaults to unsupervised_monthly/model_runs/<embedding>/scaler_stats.npz)')
-    ap.add_argument('--trained_model', type=str, default=None, help='Path to unsup_models.pt (defaults to unsupervised_monthly/model_runs/<embedding>/unsup_models.pt)')
-    ap.add_argument('--model_runs_dir', type=str, default='unsupervised_monthly/model_runs', help='Base directory for model runs and scaler stats')
+    ap.add_argument('--scaler_path', type=str, default=None, help='Scaler stats .npz for normalization (defaults to self_supervised_change_detection/model_runs/<embedding>/scaler_stats.npz)')
+    ap.add_argument('--trained_model', type=str, default=None, help='Path to unsup_models.pt (defaults to self_supervised_change_detection/model_runs/<embedding>/unsup_models.pt)')
+    ap.add_argument('--model_runs_dir', type=str, default='self_supervised_change_detection/model_runs', help='Base directory for model runs and scaler stats')
     ap.add_argument('--overwrite_models', action='store_true', help='Force retraining and overwrite existing `.pt` and `.npz` artifacts')
     ap.add_argument('--robust', action='store_true', help='Use robust (median/MAD) scaling if stats available')
     ap.add_argument('--disable_per_month_feature_norm', action='store_true', help='Disable seasonal per-month normalization stage even if stats available')
-    ap.add_argument('--output_dir', type=str, default=None, help='Defaults to unsupervised_monthly/model_runs/<embedding>')
+    ap.add_argument('--output_dir', type=str, default=None, help='Defaults to self_supervised_change_detection/model_runs/<embedding>')
     # Sophistication/adaptation flags
     ap.add_argument('--intra_site_grid_calibration', action='store_true', help='Robust (median/MAD) per-month cross-grid z (positive part) within site')
     ap.add_argument('--month_of_year_seasonal', action='store_true', help='Global month-of-year median/MAD normalization of temporal base across sites')
@@ -482,7 +482,7 @@ def main():
     # Resolve default output directory to model_runs/<embedding> (absolute based on package dir if relative)
     base_runs_dir = Path(args.model_runs_dir)
     if not base_runs_dir.is_absolute():
-        # Resolve relative to repo root to avoid double 'unsupervised_monthly/' nesting
+        # Resolve relative to repo root to avoid double 'self_supervised_change_detection/' nesting
         repo_root = PKG_DIR.parent
         base_runs_dir = repo_root / base_runs_dir
     default_runs_dir = str((base_runs_dir / args.embedding).resolve())
@@ -494,7 +494,7 @@ def main():
         # Ensure features_csv provided
         if not args.features_csv:
             raise ValueError("--features_csv is required for --mode unsup")
-        # Resolve default model/scaler paths under unsupervised_monthly/model_runs/<embedding>
+        # Resolve default model/scaler paths under self_supervised_change_detection/model_runs/<embedding>
         model_dir = default_runs_dir
         trained_model = args.trained_model or os.path.join(model_dir, 'unsup_models.pt')
         scaler_path = args.scaler_path or os.path.join(model_dir, 'scaler_stats.npz')
@@ -502,7 +502,7 @@ def main():
         if need_train:
             # Train models and compute scaler via wrapper
             cmd = [
-                sys.executable, '-m', 'unsupervised_monthly.train_unsup',
+                sys.executable, '-m', 'self_supervised_change_detection.train_unsup',
                 '--features_csv', args.features_csv,
                 '--output_dir', model_dir,
                 '--scaler_path', scaler_path,

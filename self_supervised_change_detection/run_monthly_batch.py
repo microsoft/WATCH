@@ -29,7 +29,7 @@ def run_batch(embedding: str, features_dir: str, groundtruth_csv: str | None, sp
                 src_features = features_unified_csv if features_unified_csv else features_dir
                 # Use unified monthly_inference with --mode unsup to auto-train if needed
                 cmd = [
-                    sys.executable, '-m', 'unsupervised_monthly.monthly_inference',
+                    sys.executable, '-m', 'self_supervised_change_detection.monthly_inference',
                     '--mode', 'unsup',
                     '--embedding', embedding,
                     '--features_csv', src_features,
@@ -63,7 +63,7 @@ def run_batch(embedding: str, features_dir: str, groundtruth_csv: str | None, sp
                     cmd.extend(['--score_norm_method', score_norm_method, '--score_norm_temperature', str(score_norm_temperature)])
             else:
                 cmd = [
-                    sys.executable, '-m', 'unsupervised_monthly.monthly_inference',
+                    sys.executable, '-m', 'self_supervised_change_detection.monthly_inference',
                     '--embedding', embedding,
                     '--year', str(y),
                     '--month', f"{m:02d}",

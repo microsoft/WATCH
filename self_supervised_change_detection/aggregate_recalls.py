@@ -8,7 +8,7 @@ Reads metrics CSVs produced by evaluate_unified_monthlies under
     <results_dir>/<embedding>/<embedding>_<mode>_<split>_metrics.csv
 
 Writes summary CSVs into <results_dir>:
-    - recall_{all|test}_{mode}.csv for mode in {distance_baseline, learned_unsupervised, weakly_supervised}
+    - recall_{all|test}_{mode}.csv for mode in {temporal_embedding_distance, self_supervised_change_detection, weakly_supervised}
     - plus directional variants: *_positive.csv and *_negative.csv
 
 Each file has rows=embeddings and columns=margin_0..margin_6 with values recall_at_k.
@@ -66,7 +66,8 @@ def collect_recall_matrix(results_root: Path, split: str, mode: str, max_margin:
 def main():
     import argparse
     ap = argparse.ArgumentParser('Aggregate recall@k matrices from metrics CSVs')
-    ap.add_argument('--results_dir', type=str, default=None, help='Directory containing per-embedding metrics (defaults to unsupervised_monthly/results)')
+    ap.add_argument('--results_dir', type=str, default=None, help='Directory containing per-embedding metrics (defaults to self_supervised_change_detection/results)')
+    ap.add_argument('--model_runs_dir', type=str, default=None, help='(Unused, for API compat with pipeline scripts)')
     ap.add_argument(
         '--modes',
         type=str,

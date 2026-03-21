@@ -4,12 +4,12 @@
 """Evaluate unified monthly score matrices produced by merge_monthlies.
 
 Canonical modes:
-- distance_baseline
-- learned_unsupervised
+- temporal_embedding_distance
+- self_supervised_change_detection
 - weakly_supervised
 
-Inputs: aggregated CSV like unsup_month_scores_all_distance_baseline_new.csv or
-unsup_month_scores_all_learned_unsupervised_new.csv
+Inputs: aggregated CSV like unsup_month_scores_all_temporal_embedding_distance.csv or
+unsup_month_scores_all_self_supervised_change_detection.csv
 Behavior:
 - Filters rows by split using ground truth CSV (e.g., split == 'test' or all rows)
 - Computes top-k ranking per site and metrics across margins 0..max_margin
@@ -48,14 +48,16 @@ def parse_args():
         type=str,
         default=None,
         choices=[
+            "temporal_embedding_distance",
+            "self_supervised_change_detection",
+            "weakly_supervised",
+            # legacy aliases (backward compatibility)
             "distance_baseline",
             "learned_unsupervised",
-            "weakly_supervised",
-            # legacy aliases
             "baseline",
             "unsupervised",
         ],
-        help="Mode for output naming (auto from filename if omitted). Canonical: distance_baseline|learned_unsupervised|weakly_supervised.",
+        help="Mode for output naming (auto from filename if omitted). Canonical: temporal_embedding_distance|self_supervised_change_detection|weakly_supervised.",
     )
     ap.add_argument("--top_k", type=int, default=24)
     ap.add_argument("--max_margin", type=int, default=6)

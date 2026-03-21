@@ -1,3 +1,3 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
 # Licensed under the MIT License.
-"""Unsupervised monthly change detection pipeline."""
+"""Self-Supervised Change Detection (SSCD) monthly pipeline."""

@@ -81,6 +81,8 @@ def parse_args():
     ap.add_argument("--score_norm_temperature", type=float, default=1.0)
     ap.add_argument("--export_probabilities", action="store_true", help="Write probability for the target month (from per-site normalized vector)")
 
+    ap.add_argument("--alpha_change", type=float, default=0.3,
+                    help="Fusion weight for ChangeScoreHead output (improved pipeline only).")
     return ap.parse_args()
 
 
@@ -201,6 +203,7 @@ def export_single_month_unsup(args):
             dens = dens.cpu().numpy()
             novelty = (dens - dens.min()) / (dens.max() - dens.min() + 1e-8)
             novelty = 1.0 - novelty
+            change_score = None
 
         # Calendar/month calibration: per-month z-norm using training stats if available
         if calendar_stats is not None:
@@ -227,6 +230,10 @@ def export_single_month_unsup(args):
             scores = atten_arr * (args.alpha_rec * rec_rw + args.alpha_fore * fore_rw + args.alpha_novel * nov_rw)
         else:
             scores = (args.alpha_rec * rec_rw + args.alpha_fore * fore_rw + args.alpha_novel * nov_rw)
+        # Fuse change_head scores if available (improved pipeline)
+        if change_score is not None:
+            alpha_change = getattr(args, "alpha_change", 0.5)
+            scores = scores + alpha_change * change_score
         site_names.append(s[0])
         base_temporal.append(scores)
     base_temporal = np.stack(base_temporal, axis=0) if len(base_temporal) > 0 else np.zeros((0, TIME_LEN), dtype=np.float32)
@@ -305,8 +312,8 @@ def export_single_month_unsup(args):
     # Add mode column and use explicit canonical mode name in filename
     if 'mode' not in df_out.columns:
         df_out = df_out.copy()
-        df_out.insert(1, 'mode', 'learned_unsupervised')
-    pm_path = Path(out_dir) / f"monthly_learned_unsupervised_{args.year}_{args.month:02d}_{args.split}.csv"
+        df_out.insert(1, 'mode', 'self_supervised_change_detection')
+    pm_path = Path(out_dir) / f"monthly_self_supervised_change_detection_{args.year}_{args.month:02d}_{args.split}.csv"
     df_out.to_csv(pm_path, index=False)
 
     # Update aggregated matrix (stores the selected metric per site under month name)
@@ -316,7 +323,7 @@ def export_single_month_unsup(args):
         df_for_agg["score"] = df_out["fused_score"].astype(np.float32)
     else:
         df_for_agg["score"] = df_out["score"].astype(np.float32)
-    df_for_agg['mode'] = 'learned_unsupervised'
+    df_for_agg['mode'] = 'self_supervised_change_detection'
     update_aggregated_scores(out_dir, args.split, month_str, df_for_agg)
     # Optionally remove per-month file after aggregation
     if getattr(args, 'merge', False):

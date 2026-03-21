@@ -5,12 +5,12 @@ set -euo pipefail
 
 # Run unsupervised global inference for each embedding using:
 # - global features CSVs: planet_mosaics_final_4bands/features_unified_global_without_mask
-# - trained unsup model/scaler: unsupervised_monthly/model_runs/<embedding>/{unsup_models.pt,scaler_stats.npz}
-# - output: unsupervised_monthly/global_results/<embedding>/inference_all_months_learned_unsupervised.csv
+# - trained unsup model/scaler: self_supervised_change_detection/model_runs/<embedding>/{unsup_models.pt,scaler_stats.npz}
+# - output: self_supervised_change_detection/global_results/<embedding>/inference_all_months_self_supervised_change_detection.csv
 
 FEATURES_DIR=${FEATURES_DIR:-planet_mosaics_final_4bands/features_unified_global_without_mask}
-MODEL_RUNS_DIR=${MODEL_RUNS_DIR:-unsupervised_monthly/model_runs}
-OUT_BASE=${OUT_BASE:-unsupervised_monthly/global_results}
+MODEL_RUNS_DIR=${MODEL_RUNS_DIR:-self_supervised_change_detection/model_runs}
+OUT_BASE=${OUT_BASE:-self_supervised_change_detection/global_results}
 PY=${PY:-./change_detect/bin/python}
 DEVICE=${DEVICE:-cuda}
 GPU_ID=${GPU_ID:-0}
@@ -57,10 +57,10 @@ for emb in "${embeddings[@]}"; do
 
   out_dir="$OUT_BASE/$emb"
   mkdir -p "$out_dir"
-  out_csv="$out_dir/inference_all_months_learned_unsupervised.csv"
+  out_csv="$out_dir/inference_all_months_self_supervised_change_detection.csv"
 
   echo "[run] unsupervised global: $emb"
-  "$PY" -m unsupervised_monthly.infer_all_months \
+  "$PY" -m self_supervised_change_detection.infer_all_months \
     --features_csv "$feats" \
     --trained_model "$model_pt" \
     --scaler_path "$scaler_npz" \
