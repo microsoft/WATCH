@@ -14,7 +14,7 @@ Overall, WATCH demonstrates that foundation-model embeddings, combined with labe
   <img src="figures/fig_watch_framework.png" alt="WATCH Framework Overview" width="100%">
 </p>
 
-**Figure:** Overview of the WATCH framework. (a) PlanetScope monthly mosaics (RGB+NIR, 4.7 m/px, 2017–2024) are processed into 1 km² site patches with binary masks for 1,943 archaeological sites in Afghanistan. (b) Foundation-model embeddings and handcrafted features are extracted and temporally normalized, then scored via three complementary pipelines: a distance baseline, a learned unsupervised ensemble, and a weakly supervised temporal model, each producing a monthly change score. (c) Scores are converted to change probabilities and evaluated using Recall@K with symmetric and directional temporal margins, supporting heritage monitoring, looting detection, and temporal analysis applications.
+**Figure:** Overview of the WATCH framework. (a) PlanetScope monthly mosaics (RGB+NIR, 4.7 m/px, 2017–2024) are processed into 1 km² site patches with binary masks for 1,943 archaeological sites in Afghanistan. (b) Foundation-model embeddings and handcrafted features are extracted and temporally normalized, then scored via three complementary pipelines: TED (Temporal Embedding Distance), SSCD (Self-Supervised Change Detection), and WS (Weakly Supervised), each producing a monthly change score. (c) Scores are converted to change probabilities and evaluated using Recall@K with symmetric and directional temporal margins, supporting heritage monitoring, looting detection, and temporal analysis applications.
 
 ## Global Distribution of Archaeological Sites
 
@@ -43,9 +43,9 @@ This repository provides a standardized, end-to-end month-level change detection
 
 1) extracting per-site monthly embeddings (foundation models or handcrafted), then
 2) running one (or more) maintained monthly pipelines:
-   - **Distance baseline** (no training): `unsupervised_monthly` `distance_baseline` mode
-   - **Learned unsupervised** (train once, then export): `unsupervised_monthly` `learned_unsupervised` mode
-   - **Weakly-supervised** (train on month labels up to a cutoff): `weakly_supervised_monthly`
+   - **TED (Temporal Embedding Distance)** (no training): `unsupervised_monthly` `distance_baseline` mode
+   - **SSCD (Self-Supervised Change Detection)** (train once, then export): `unsupervised_monthly` `learned_unsupervised` mode
+   - **WS (Weakly Supervised)** (train on month labels up to a cutoff): `weakly_supervised_monthly`
 
 All three pipelines output a per-site probability distribution over months (columns `2017_01..2024_12`) and share the same evaluation tooling.
 
@@ -186,7 +186,7 @@ All runners assume you activated the environment:
 source change_detect/bin/activate
 ```
 
-### 4.1 Unsupervised monthly: Distance baseline mode
+### 4.1 TED (Temporal Embedding Distance)
 
 Start runs (one tmux session per embedding), then merge/evaluate/aggregate:
 
@@ -205,7 +205,7 @@ Outputs:
 - Per-embedding metrics:
    - `unsupervised_monthly/results/<embedding>/<embedding>_distance_baseline_{test|all}_metrics{,_positive,_negative}.csv`
 
-### 4.2 Unsupervised monthly: Learned unsupervised mode
+### 4.2 SSCD (Self-Supervised Change Detection)
 
 ```bash
 # Start tmux sessions (all default embeddings)
@@ -298,9 +298,9 @@ The monthly pipelines support multiple feature extraction backends:
 
 These embeddings feed into three scoring pipelines:
 
-- **Distance baseline**: Detects change by measuring embedding drift over time (no training required)
-- **Learned unsupervised**: Trains an ensemble of reconstruction / forecasting / novelty heads, then exports month-level scores
-- **Weakly-supervised**: Trains a lightweight sequence model using month labels up to a cutoff date
+- **TED (Temporal Embedding Distance)**: Detects change by measuring embedding drift over time (no training required)
+- **SSCD (Self-Supervised Change Detection)**: Trains an ensemble of reconstruction / forecasting / novelty heads, then exports month-level scores
+- **WS (Weakly Supervised)**: Trains a lightweight sequence model using month labels up to a cutoff date
 
 ## Evaluation Metrics
 
@@ -357,15 +357,15 @@ All feature extraction goes through the unified entry point:
 ### 2. Run Pipelines
 
 ```bash
-# Distance baseline
+# TED (Temporal Embedding Distance)
 bash unsupervised_monthly/run_baseline_pipeline.sh start   # launch tmux sessions
 bash unsupervised_monthly/run_baseline_pipeline.sh all     # merge + evaluate
 
-# Learned unsupervised
+# SSCD (Self-Supervised Change Detection)
 bash unsupervised_monthly/run_unsupervised_pipeline.sh start
 bash unsupervised_monthly/run_unsupervised_pipeline.sh all
 
-# Weakly-supervised
+# WS (Weakly Supervised)
 bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh start
 bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh aggregate
 ```
@@ -373,13 +373,13 @@ bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly.sh aggregat
 ### 3. Global Inference (All Embeddings)
 
 ```bash
-# Distance baseline — global
+# TED — global
 bash unsupervised_monthly/run_baseline_global.sh
 
-# Learned unsupervised — global
+# SSCD — global
 bash unsupervised_monthly/run_unsupervised_global.sh
 
-# Weakly-supervised — global
+# WS — global
 bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly_global.sh
 ```
 
@@ -388,28 +388,6 @@ bash weakly_supervised_monthly/scripts/run_weakly_supervised_monthly_global.sh
 ```bash
 python export_merged_monthly_inference_tables.py --pipelines all --year_start 2017 --year_end 2024
 ```
-
-### 5. Quick Diagnostic Checks
-
-```bash
-# List produced probability files for a model
-ls -1 unsupervised_monthly/model_runs/<embedding>/unsup_month_scores_all_*.csv
-
-# Verify month headers
-head -n 2 unsupervised_monthly/model_runs/<embedding>/unsup_month_scores_all_distance_baseline_new.csv
-
-# Check weakly-supervised outputs
-ls weakly_supervised_monthly/model_runs/<embedding>/unsup_month_scores_all_weakly_supervised.csv
-```
-
-### 6. Troubleshooting
-
-| Symptom | Likely Cause | Action |
-|---------|-------------|--------|
-| Missing probability columns | Export skipped / stale file | Re-run the pipeline with `--force-export` if supported |
-| Model directory empty | Feature CSV not found | Verify extraction completed and output filename matches expected pattern |
-| GPU OOM during extraction | Batch too large | Use `--device cpu` or reduce input resolution |
-| Misaligned month range | Start/end year mismatch | Re-extract features with consistent `--start-year 2017 --end-year 2024` |
 
 ---
 

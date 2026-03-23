@@ -110,12 +110,10 @@ test.ipynb
 !/figures/
 !/download_hf_models.py
 !/export_merged_monthly_inference_tables.py
-!/generate_paper_results.py
 !/extract_embeddings_unified_modified.py
 !/extract_embeddings.sh
 !/feature_extraction.py
-!/satlaspretrain_finalize.sh
-!/watch_and_finalize.sh
+
 
 # Allow scripts in unsupervised already via dir allow; still ignore heavy outputs within
 unsupervised/model_runs/
@@ -154,5 +152,8 @@ unsupervised_monthly/methods.tex
 
 # Prior git backup (never commit again)
 .git_old/
+
+# Temporary paper/figure generation scripts (not part of public release)
+generate_*.py
 
 # DO NOT list README.md or core code files here (ensure they are tracked)
