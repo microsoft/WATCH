@@ -160,4 +160,3 @@ unsupervised_monthly/methods.tex
 # Temporary paper/figure generation scripts (not part of public release)
 generate_*.py
 
-# DO NOT list README.md or core code files here (ensure they are tracked)
